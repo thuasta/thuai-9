@@ -1,15 +1,285 @@
-﻿// See https://aka.ms/new-console-template for more information
-namespace thuai;
+namespace Thuai;
+
+using Serilog;
+using Serilog.Events;
+using Thuai.Utility;
+using Thuai.Connection;
+using Thuai.GameLogic;
+using Thuai.Protocol.Messages;
 
 public class Program
 {
     public static void Main(string[] args)
     {
-        // TODO: finish
+        Config config;
+        try
+        {
+            config = Tools.LoadOrCreateConfig("config/config.json");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to load config: {ex.Message}");
+            return;
+        }
+
+        // Setup logging
+        SetupLogger(config.Log);
+        Log.Information("THUAI-9 Server starting...");
+
+        try
+        {
+            // Create components
+            var agentServer = new AgentServer { Port = config.Server.Port };
+            var gameController = new GameController.GameController(config.Game);
+            using var recorder = new Recorder.Recorder("./data", config.Recorder.KeepRecord);
+
+            // Load tokens and add players
+            var tokens = Tools.LoadTokens(config.Token);
+            Log.Information("Loaded {Count} player tokens", tokens.Length);
+            foreach (var token in tokens)
+            {
+                gameController.Game.AddPlayer(token);
+                Log.Information("Added player: {Token}", token);
+            }
+
+            // Wire events
+            // AgentServer -> GameController: player messages
+            agentServer.AfterMessageReceiveEvent += gameController.HandleAfterMessageReceiveEvent;
+            // AgentServer -> GameController: player connections
+            agentServer.AfterPlayerConnectEvent += gameController.HandleAfterPlayerConnectEvent;
+            // GameController -> AgentServer: link socket to token
+            gameController.AfterPlayerConnectEvent += (sender, e) =>
+            {
+                agentServer.HandleAfterPlayerConnectEvent(sender,
+                    new AgentServer.AfterPlayerConnectEventArgs
+                    {
+                        SocketId = e.SocketId,
+                        Token = e.Token
+                    });
+            };
+
+            // Game -> Broadcast + Record: after each tick
+            gameController.Game.AfterGameTickEvent += (sender, e) =>
+            {
+                BroadcastGameState(agentServer, e.Game);
+                RecordGameState(recorder, e.Game);
+            };
+
+            // Start server
+            agentServer.Start();
+            gameController.Start();
+
+            Log.Information("Server running. Waiting for game to finish...");
+
+            // Poll until game finishes
+            while (gameController.IsRunning)
+            {
+                Task.Delay(1000).Wait();
+            }
+
+            // Game finished - save results
+            Log.Information("Game complete. Saving results...");
+            recorder.Flush();
+
+            var scores = gameController.Game.Scoreboard;
+            recorder.SaveResults(scores);
+
+            foreach (var (token, score) in scores)
+            {
+                Log.Information("Player {Token}: {Score} points", token, score);
+            }
+
+            agentServer.Stop();
+            gameController.Stop();
+            Log.Information("Server shut down");
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Server crashed");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
     }
 
-    public static int Add(int a, int b)
+    private static void SetupLogger(LogSettings logSettings)
     {
-        return a + b;
+        var levelSwitch = logSettings.MinimumLevel.ToLower() switch
+        {
+            "verbose" => LogEventLevel.Verbose,
+            "debug" => LogEventLevel.Debug,
+            "information" => LogEventLevel.Information,
+            "warning" => LogEventLevel.Warning,
+            "error" => LogEventLevel.Error,
+            "fatal" => LogEventLevel.Fatal,
+            _ => LogEventLevel.Information
+        };
+
+        var logConfig = new LoggerConfiguration()
+            .MinimumLevel.Is(levelSwitch);
+
+        if (logSettings.Target.ToLower() == "console" || logSettings.Target.ToLower() == "both")
+        {
+            logConfig = logConfig.WriteTo.Console();
+        }
+
+        if (logSettings.Target.ToLower() == "file" || logSettings.Target.ToLower() == "both")
+        {
+            var interval = logSettings.RollingInterval.ToLower() switch
+            {
+                "hour" => RollingInterval.Hour,
+                "day" => RollingInterval.Day,
+                "month" => RollingInterval.Month,
+                _ => RollingInterval.Day
+            };
+
+            logConfig = logConfig.WriteTo.File(
+                Path.Combine(logSettings.TargetDirectory, "thuai-.log"),
+                rollingInterval: interval);
+        }
+
+        Log.Logger = logConfig.CreateLogger();
     }
+
+    private static void BroadcastGameState(AgentServer agentServer, Game game)
+    {
+        // 1. Broadcast global game state to all
+        var gameState = new GameStateMessage
+        {
+            Stage = game.Stage.ToString(),
+            CurrentDay = game.CurrentDayNumber,
+            CurrentTick = game.CurrentTick,
+            TotalTicks = game.Stage == GameStage.TradingDay
+                ? game.CurrentTradingDay?.CurrentTick ?? 0
+                : 0,
+            Scores = game.Scoreboard.Select(kv => new PlayerScore
+            {
+                Token = kv.Key,
+                Score = kv.Value
+            }).ToList()
+        };
+        agentServer.PublishToAll(gameState);
+
+        // 2. During trading day, broadcast market state and per-player state
+        if (game.Stage == GameStage.TradingDay && game.CurrentTradingDay != null)
+        {
+            var day = game.CurrentTradingDay;
+            var orderBook = day.OrderBook;
+
+            // Market state (public)
+            var marketState = new MarketStateMessage
+            {
+                Bids = orderBook.GetVisibleBids().Select(l => new PriceLevel
+                {
+                    Price = l.Price,
+                    Quantity = l.Quantity
+                }).ToList(),
+                Asks = orderBook.GetVisibleAsks().Select(l => new PriceLevel
+                {
+                    Price = l.Price,
+                    Quantity = l.Quantity
+                }).ToList(),
+                LastPrice = orderBook.LastPrice,
+                MidPrice = orderBook.MidPrice,
+                Volume = orderBook.TotalVolume,
+                Tick = day.CurrentTick
+            };
+            agentServer.PublishToAll(marketState);
+
+            // Per-player private state
+            foreach (var player in game.Players.Values)
+            {
+                var pendingOrders = day.GetPlayerPendingOrders(player.Token);
+                var playerState = new PlayerStateMessage
+                {
+                    Mora = player.Mora,
+                    FrozenMora = player.FrozenMora,
+                    Gold = player.Gold,
+                    FrozenGold = player.FrozenGold,
+                    LockedGold = player.LockedGold,
+                    Nav = player.CalculateNAV(orderBook.MidPrice),
+                    ActiveCards = player.ActiveCards.Select(c => c.Name).ToList(),
+                    PendingOrders = pendingOrders.Select(o => new OrderInfo
+                    {
+                        OrderId = o.OrderId,
+                        Side = o.Side.ToString(),
+                        Price = o.Price,
+                        Quantity = o.Quantity,
+                        RemainingQuantity = o.RemainingQuantity,
+                        Status = o.Status.ToString()
+                    }).ToList()
+                };
+                agentServer.Publish(playerState, player.Token);
+            }
+        }
+
+        // 3. During strategy selection, broadcast options
+        if (game.Stage == GameStage.StrategySelection)
+        {
+            var cardManager = game.CardManager;
+            var options = new StrategyOptionsMessage
+            {
+                Infrastructure = cardManager.CurrentInfrastructure != null
+                    ? new CardOption
+                    {
+                        Name = cardManager.CurrentInfrastructure.Name,
+                        Description = cardManager.CurrentInfrastructure.Description,
+                        Category = "Infrastructure"
+                    }
+                    : null,
+                RiskControl = cardManager.CurrentRiskControl != null
+                    ? new CardOption
+                    {
+                        Name = cardManager.CurrentRiskControl.Name,
+                        Description = cardManager.CurrentRiskControl.Description,
+                        Category = "RiskControl"
+                    }
+                    : null,
+                FinTech = cardManager.CurrentFinTech != null
+                    ? new CardOption
+                    {
+                        Name = cardManager.CurrentFinTech.Name,
+                        Description = cardManager.CurrentFinTech.Description,
+                        Category = "FinTech"
+                    }
+                    : null
+            };
+            agentServer.PublishToAll(options);
+        }
+    }
+
+    private static void RecordGameState(Recorder.Recorder recorder, Game game)
+    {
+        var snapshot = new
+        {
+            Tick = game.CurrentTick,
+            Stage = game.Stage.ToString(),
+            Day = game.CurrentDayNumber,
+            Scores = game.Scoreboard,
+            TradingDayTick = game.CurrentTradingDay?.CurrentTick,
+            MarketState = game.CurrentTradingDay != null ? new
+            {
+                LastPrice = game.CurrentTradingDay.OrderBook.LastPrice,
+                MidPrice = game.CurrentTradingDay.OrderBook.MidPrice,
+                Volume = game.CurrentTradingDay.OrderBook.TotalVolume
+            } : null,
+            Players = game.Players.Values.Select(p => new
+            {
+                Token = p.Token,
+                Mora = p.Mora,
+                Gold = p.Gold,
+                FrozenMora = p.FrozenMora,
+                FrozenGold = p.FrozenGold,
+                Nav = game.CurrentTradingDay != null
+                    ? p.CalculateNAV(game.CurrentTradingDay.OrderBook.MidPrice)
+                    : p.Mora
+            }).ToList()
+        };
+
+        recorder.Record(snapshot);
+    }
+
+    // Keep this for backward compatibility with tests
+    public static int Add(int a, int b) => a + b;
 }
