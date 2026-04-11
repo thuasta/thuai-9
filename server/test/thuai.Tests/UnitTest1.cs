@@ -1,4 +1,4 @@
-﻿namespace thuai.Tests;
+﻿namespace Thuai.Tests;
 
 public class UnitTest1
 {
