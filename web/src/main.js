@@ -16,12 +16,16 @@ import {
   pushEvent,
   routeFromLocation,
   setCandleOptions,
+  setColorScheme,
   setConnectionPatch,
   setMode,
 } from "./store.js";
 import { renderApp } from "./render.js";
+import { applyColorScheme, loadColorScheme, saveColorScheme } from "./appearance.js";
 
 const state = createInitialState(routeFromLocation(window.location));
+setColorScheme(state, loadColorScheme());
+applyColorScheme(state.ui.colorScheme);
 let ws = null;
 let reconnectTimer = null;
 let manuallyClosed = false;
@@ -61,6 +65,12 @@ function bindControls() {
 
   document.getElementById("intervalSelect")?.addEventListener("change", (event) => {
     setCandleOptions(state, { interval: event.target.value });
+    renderApp(state);
+  });
+
+  document.getElementById("colorSchemeSelect")?.addEventListener("change", (event) => {
+    setColorScheme(state, event.target.value);
+    saveColorScheme(state.ui.colorScheme);
     renderApp(state);
   });
 

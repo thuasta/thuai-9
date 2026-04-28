@@ -5,6 +5,7 @@ import {
   createCandleAccumulator,
   normalizeInterval,
 } from "./candles.js";
+import { DEFAULT_COLOR_SCHEME, normalizeColorScheme } from "./appearance.js";
 
 const MAX_EVENTS = 160;
 const MAX_MARKET_HISTORY = 8000;
@@ -67,6 +68,7 @@ export function createInitialState(route = {}) {
     ui: {
       eventCounter: 0,
       showSettlement: false,
+      colorScheme: normalizeColorScheme(route.colorScheme || DEFAULT_COLOR_SCHEME),
     },
   };
 }
@@ -91,6 +93,10 @@ export function setCandleOptions(state, options) {
   }
   state.market.candleAccumulator = accumulator;
   state.market.candles = accumulator.candles;
+}
+
+export function setColorScheme(state, value) {
+  state.ui.colorScheme = normalizeColorScheme(value);
 }
 
 export function applyMessage(state, message) {

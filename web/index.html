@@ -47,6 +47,11 @@
           <input id="tokenInput" type="text" value="player1" spellcheck="false">
         </label>
 
+        <label class="field appearance-field">
+          <span>颜色配置</span>
+          <select id="colorSchemeSelect" aria-label="颜色配置"></select>
+        </label>
+
         <div class="button-row">
           <button id="connectButton" class="primary-button" type="button">连接</button>
           <button id="disconnectButton" type="button">断开</button>
@@ -203,8 +208,8 @@
               <input name="quantity" type="number" min="1" step="1" required>
             </label>
             <div class="button-row">
-              <button name="side" value="buy" type="submit">买入</button>
-              <button name="side" value="sell" type="submit">卖出</button>
+              <button class="side-button buy" name="side" value="buy" type="submit">买入</button>
+              <button class="side-button sell" name="side" value="sell" type="submit">卖出</button>
             </div>
           </form>
 

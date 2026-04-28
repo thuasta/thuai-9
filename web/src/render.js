@@ -1,7 +1,10 @@
+import { applyColorScheme, COLOR_SCHEMES, readAppliedPalette } from "./appearance.js";
+
 const PLACEHOLDER = '<p class="placeholder">暂无数据</p>';
 
 export function renderApp(state) {
   document.body.dataset.mode = state.connection.role;
+  applyColorScheme(state.ui.colorScheme);
 
   setText("stageValue", state.game.stage || "-");
   setText("dayValue", state.game.currentDay || "-");
@@ -39,11 +42,14 @@ function renderControls(state) {
   const tokenInput = document.getElementById("tokenInput");
   const priceModeSelect = document.getElementById("priceModeSelect");
   const intervalSelect = document.getElementById("intervalSelect");
+  const colorSchemeSelect = document.getElementById("colorSchemeSelect");
 
   setInputValue(serverInput, state.connection.server);
   setInputValue(tokenInput, state.connection.token);
   setInputValue(priceModeSelect, state.market.priceField);
   setInputValue(intervalSelect, String(state.market.interval));
+  fillColorSchemeOptions(colorSchemeSelect);
+  setInputValue(colorSchemeSelect, state.ui.colorScheme);
 
   document.querySelectorAll("[data-mode]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.mode === state.connection.role);
@@ -186,7 +192,7 @@ function renderOrders(state) {
     .map((order) => `
       <tr>
         <td>${escapeHtml(order.orderId)}</td>
-        <td>${escapeHtml(order.side)}</td>
+        <td><span class="side-pill ${sideClass(order.side)}">${escapeHtml(order.side)}</span></td>
         <td>${formatNumber(order.price)}</td>
         <td>${formatNumber(order.quantity)}</td>
         <td>${formatNumber(order.remainingQuantity)}</td>
@@ -262,6 +268,7 @@ function renderSettlement(state) {
 
 export function drawMarketChart(canvas, state) {
   if (!canvas) return;
+  const palette = readAppliedPalette();
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   const width = Math.max(320, Math.floor(rect.width));
@@ -310,7 +317,7 @@ export function drawMarketChart(canvas, state) {
     const highY = mapRange(candle.high, priceMin, priceMax, margin.top + priceHeight, margin.top);
     const lowY = mapRange(candle.low, priceMin, priceMax, margin.top + priceHeight, margin.top);
     const up = candle.close >= candle.open;
-    const color = up ? "#2f7d4f" : "#c44536";
+    const color = up ? palette.up : palette.down;
     const bodyWidth = Math.max(3, Math.min(12, slot * 0.58));
     const bodyTop = Math.min(openY, closeY);
     const bodyHeight = Math.max(2, Math.abs(closeY - openY));
@@ -361,6 +368,17 @@ function drawGrid(ctx, margin, width, height, priceHeight, priceMin, priceMax) {
 
 function statCell(label, value) {
   return `<div><span>${escapeHtml(label)}</span><strong>${formatNumber(value)}</strong></div>`;
+}
+
+function fillColorSchemeOptions(select) {
+  if (!select || select.options.length) return;
+  select.innerHTML = COLOR_SCHEMES
+    .map((scheme) => `<option value="${escapeAttribute(scheme.value)}">${escapeHtml(scheme.label)}</option>`)
+    .join("");
+}
+
+function sideClass(value) {
+  return String(value || "").toLowerCase() === "sell" ? "sell" : "buy";
 }
 
 function renderTags(tags) {
