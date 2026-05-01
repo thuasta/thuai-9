@@ -1,6 +1,7 @@
 import {
   activateSkillMessage,
   cancelOrderMessage,
+  helloMessage,
   limitBuyMessage,
   limitSellMessage,
   selectStrategyMessage,
@@ -125,6 +126,7 @@ function connect() {
       lastError: "",
     });
     sendAction(cancelOrderMessage(state.connection.token || "player1", -1), { silent: true });
+    sendAction(helloMessage(state.connection.role, state.connection.token), { silent: true });
     renderApp(state);
   });
 

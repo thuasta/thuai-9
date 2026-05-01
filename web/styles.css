@@ -422,6 +422,7 @@ button:focus-visible {
 .strategy-grid,
 .tag-row,
 .daily-summary-list {
+.tag-row {
   display: grid;
   gap: 8px;
 }
@@ -766,6 +767,10 @@ body[data-mode="player"] .observer-panel {
   .price-grid,
   .summary-player-grid,
   .day-summary-head {
+  .comparison-grid,
+  .portfolio-grid,
+  .book-columns,
+  .price-grid {
     grid-template-columns: 1fr;
   }
 
