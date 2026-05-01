@@ -14,6 +14,7 @@ export function renderApp(state) {
   renderScoreboard(state);
   renderPrices(state);
   renderOrderBook(state);
+  renderNews(state);
   renderEvents(state);
   renderPlayerComparison(state);
   renderPortfolio(state);
@@ -98,6 +99,74 @@ function renderOrderBook(state) {
 
   renderBookList("bidsList", bids, "bid", maxQty);
   renderBookList("asksList", asks, "ask", maxQty);
+}
+
+function renderNews(state) {
+  const latestNode = document.getElementById("latestNews");
+  const feedNode = document.getElementById("newsFeed");
+  const countNode = document.getElementById("newsCount");
+  const quickReportForm = document.getElementById("quickReportForm");
+  if (!latestNode || !feedNode || !countNode) return;
+
+  const newsItems = state.news.items || [];
+  countNode.textContent = String(newsItems.length);
+
+  if (!newsItems.length) {
+    latestNode.innerHTML = `
+      <article class="news-empty">
+        <strong>等待第一条快报</strong>
+        <p>NEWS_BROADCAST 到达后会在这里显示。</p>
+      </article>
+    `;
+    feedNode.innerHTML = "";
+    if (quickReportForm) {
+      quickReportForm.hidden = true;
+      quickReportForm.newsId.value = "";
+    }
+    return;
+  }
+
+  const latest = newsItems[0];
+  const latestResult = state.news.results[latest.newsId];
+  latestNode.innerHTML = renderNewsCard(latest, latestResult, true);
+  feedNode.innerHTML = newsItems
+    .slice(1, 8)
+    .map((item) => renderNewsCard(item, state.news.results[item.newsId], false))
+    .join("");
+
+  if (quickReportForm) {
+    quickReportForm.hidden = state.connection.role !== "player";
+    quickReportForm.newsId.value = latest.newsId;
+  }
+}
+
+function renderNewsCard(news, result, isLatest) {
+  const fakeBadge = news.isFake
+    ? `<span class="news-badge danger">伪造</span>`
+    : `<span class="news-badge">公开</span>`;
+  const source = news.sourcePlayer ? `<span>来源 ${escapeHtml(news.sourcePlayer)}</span>` : "";
+  const resultMarkup = result
+    ? `
+      <div class="report-result ${result.isCorrect ? "correct" : "wrong"}">
+        <span>${escapeHtml(result.prediction || "-")}</span>
+        <strong>${result.isCorrect ? "命中" : "偏离"}</strong>
+        <span>奖惩 ${formatNumber(result.reward)}</span>
+      </div>
+    `
+    : "";
+
+  return `
+    <article class="news-card ${isLatest ? "is-latest" : ""}">
+      <div class="news-meta">
+        <span>#${escapeHtml(news.newsId || "-")}</span>
+        <span>D${escapeHtml(news.day || "-")} T${escapeHtml(news.publishTick || "-")}</span>
+        ${fakeBadge}
+        ${source}
+      </div>
+      <p>${escapeHtml(news.content || "暂无正文")}</p>
+      ${resultMarkup}
+    </article>
+  `;
 }
 
 function renderBookList(id, levels, side, maxQty) {

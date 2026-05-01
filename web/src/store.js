@@ -9,6 +9,7 @@ import { DEFAULT_COLOR_SCHEME, normalizeColorScheme } from "./appearance.js";
 
 const MAX_EVENTS = 160;
 const MAX_MARKET_HISTORY = 8000;
+const MAX_NEWS = 80;
 
 export function routeFromLocation(location) {
   const search = new URLSearchParams(location.search);
@@ -62,6 +63,10 @@ export function createInitialState(route = {}) {
     playerSummaries: {},
     strategy: {
       options: null,
+    },
+    news: {
+      items: [],
+      results: {},
     },
     events: [],
     settlement: null,
@@ -154,6 +159,7 @@ export function applyMessage(state, message) {
       break;
 
     case "NEWS_BROADCAST":
+      upsertNews(state, message);
       pushEvent(state, {
         kind: "news",
         title: `新闻 #${message.newsId ?? "-"}`,
@@ -163,6 +169,7 @@ export function applyMessage(state, message) {
       break;
 
     case "REPORT_RESULT":
+      upsertReportResult(state, message);
       pushEvent(state, {
         kind: "report",
         title: `研报 ${message.isCorrect ? "正确" : "错误"}`,
@@ -242,6 +249,40 @@ export function pushEvent(state, event) {
 
 export function clearSettlement(state) {
   state.ui.showSettlement = false;
+}
+
+function upsertNews(state, message) {
+  const newsId = message.newsId ?? "";
+  const existingIndex = state.news.items.findIndex((item) => item.newsId === newsId);
+  const next = {
+    newsId,
+    content: message.content || "",
+    publishTick: numberOr(message.publishTick, state.market.tick),
+    day: state.game.currentDay,
+    isFake: Boolean(message.isFake),
+    sourcePlayer: message.sourcePlayer || "",
+    receivedAt: state.game.currentTick || state.market.tick || 0,
+  };
+
+  if (existingIndex >= 0) {
+    state.news.items.splice(existingIndex, 1);
+  }
+  state.news.items.unshift(next);
+  if (state.news.items.length > MAX_NEWS) {
+    state.news.items.length = MAX_NEWS;
+  }
+}
+
+function upsertReportResult(state, message) {
+  const newsId = message.newsId ?? "";
+  if (newsId === "") return;
+  state.news.results[newsId] = {
+    playerToken: message.playerToken || "",
+    prediction: message.prediction || "",
+    isCorrect: Boolean(message.isCorrect),
+    reward: numberOr(message.reward, 0),
+    actualChange: numberOr(message.actualChange, 0),
+  };
 }
 
 function appendMarketSnapshot(state) {
