@@ -250,12 +250,31 @@ button:focus-visible {
   line-height: 1.2;
 }
 
+.panel-count {
+  display: inline-grid;
+  min-width: 34px;
+  min-height: 30px;
+  border: 1px solid rgba(198, 144, 22, 0.35);
+  border-radius: 8px;
+  padding: 4px 8px;
+  place-items: center;
+  color: var(--gold);
+  background: rgba(198, 144, 22, 0.08);
+  font-size: 14px;
+}
+
 .market-panel {
   grid-column: span 2;
 }
 
 .events-panel {
   grid-row: span 2;
+}
+
+.news-panel {
+  display: grid;
+  grid-column: 3;
+  gap: 10px;
 }
 
 .daily-summary-panel {
@@ -374,6 +393,126 @@ button:focus-visible {
 
 .book-row span:last-child {
   text-align: right;
+}
+
+.latest-news,
+.news-feed {
+  display: grid;
+  gap: 8px;
+}
+
+.news-feed {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.news-card,
+.news-empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background:
+    linear-gradient(90deg, rgba(198, 144, 22, 0.08), transparent 58%),
+    #fbfcfc;
+}
+
+.news-card.is-latest {
+  border-color: rgba(198, 144, 22, 0.45);
+  box-shadow: inset 4px 0 0 var(--gold);
+}
+
+.news-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.news-card p,
+.news-empty p {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.news-empty strong {
+  display: block;
+  font-size: 15px;
+}
+
+.news-badge {
+  border: 1px solid rgba(15, 139, 141, 0.28);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--teal);
+  background: rgba(15, 139, 141, 0.08);
+}
+
+.news-badge.danger {
+  border-color: rgba(196, 69, 54, 0.3);
+  color: var(--red);
+  background: rgba(196, 69, 54, 0.08);
+}
+
+.report-result {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.report-result strong {
+  color: var(--text);
+}
+
+.report-result.correct strong {
+  color: var(--green);
+}
+
+.report-result.wrong strong {
+  color: var(--red);
+}
+
+.quick-report {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.quick-report[hidden] {
+  display: none;
+}
+
+.report-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.report-actions button {
+  font-weight: 800;
+}
+
+.report-actions button[value="Long"] {
+  border-color: rgba(196, 69, 54, 0.35);
+  color: var(--side-buy);
+}
+
+.report-actions button[value="Short"] {
+  border-color: rgba(47, 125, 79, 0.35);
+  color: var(--side-sell);
 }
 
 .event-feed {
@@ -734,6 +873,10 @@ body[data-mode="player"] .observer-panel {
 
   .events-panel {
     grid-row: auto;
+  }
+
+  .news-panel {
+    grid-column: auto;
   }
 }
 

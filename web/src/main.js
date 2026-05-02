@@ -77,6 +77,7 @@ function bindControls() {
   document.getElementById("orderForm")?.addEventListener("submit", handleOrder);
   document.getElementById("cancelForm")?.addEventListener("submit", handleCancel);
   document.getElementById("reportForm")?.addEventListener("submit", handleReport);
+  document.getElementById("quickReportForm")?.addEventListener("submit", handleQuickReport);
   document.getElementById("skillForm")?.addEventListener("submit", handleSkill);
 
   document.getElementById("strategyOptions")?.addEventListener("click", (event) => {
@@ -232,6 +233,17 @@ function handleReport(event) {
     state.connection.token,
     data.get("newsId"),
     data.get("prediction"),
+  ));
+}
+
+function handleQuickReport(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const prediction = event.submitter?.value || data.get("prediction");
+  sendAction(submitReportMessage(
+    state.connection.token,
+    data.get("newsId"),
+    prediction,
   ));
 }
 

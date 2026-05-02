@@ -104,6 +104,17 @@ export function buildSampleMessages() {
       });
     }
 
+    if (tick === 72) {
+      messages.push({
+        messageType: "NEWS_BROADCAST",
+        newsId: 8,
+        content: "飞云商会称黄金运输恢复，部分现货报价松动。",
+        publishTick: tick,
+        isFake: true,
+        sourcePlayer: "player2",
+      });
+    }
+
     if (tick === 54) {
       messages.push({
         messageType: "TRADE_NOTIFICATION",
@@ -134,6 +145,17 @@ export function buildSampleMessages() {
         isCorrect: true,
         reward: 14800,
         actualChange: 11,
+      });
+    }
+
+    if (tick === 132) {
+      messages.push({
+        messageType: "REPORT_RESULT",
+        newsId: 8,
+        prediction: "Short",
+        isCorrect: false,
+        reward: -9200,
+        actualChange: 7,
       });
     }
   }
