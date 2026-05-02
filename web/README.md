@@ -7,6 +7,10 @@
 ```bash
 cd web
 python3 -m http.server 5173 -d .
+
+# or
+
+npm run serve
 ```
 
 打开：
