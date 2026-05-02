@@ -115,6 +115,26 @@
           </div>
         </section>
 
+        <section class="panel news-panel">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Liyue Bulletin</p>
+              <h2>璃月快报</h2>
+            </div>
+            <strong id="newsCount" class="panel-count">0</strong>
+          </div>
+          <div id="latestNews" class="latest-news"></div>
+          <div id="newsFeed" class="news-feed"></div>
+          <form id="quickReportForm" class="quick-report player-only">
+            <input name="newsId" type="hidden">
+            <div class="report-actions" role="group" aria-label="研报方向">
+              <button name="prediction" value="Long" type="submit">Long</button>
+              <button name="prediction" value="Short" type="submit">Short</button>
+              <button name="prediction" value="Hold" type="submit">Hold</button>
+            </div>
+          </form>
+        </section>
+
         <section class="panel events-panel">
           <div class="panel-head compact">
             <div>
