@@ -1,4 +1,5 @@
 import { applyColorScheme, COLOR_SCHEMES, readAppliedPalette } from "./appearance.js";
+import { unreadNewsCount } from "./store.js";
 
 const PLACEHOLDER = '<p class="placeholder">暂无数据</p>';
 const VIEW_TITLES = {
@@ -113,36 +114,26 @@ function renderPrices(state) {
 }
 
 function renderOrderBook(state) {
-  const bids = state.market.bids.slice(0, 12);
-  const asks = state.market.asks.slice(0, 12);
-  const maxQty = Math.max(
-    1,
-    ...bids.map((level) => Number(level.quantity) || 0),
-    ...asks.map((level) => Number(level.quantity) || 0),
-  );
+  const bids = state.market.bids;
+  const asks = state.market.asks;
 
-  renderBookList("bidsList", bids, "bid", maxQty);
-  renderBookList("asksList", asks, "ask", maxQty);
+  renderBookList("bidsList", bids, "bid");
+  renderBookList("asksList", asks, "ask");
 }
 
 function renderNews(state) {
-  const latestNode = document.getElementById("latestNews");
   const feedNode = document.getElementById("newsFeed");
-  const countNode = document.getElementById("newsCount");
+  const unreadNode = document.getElementById("newsUnreadBadge");
   const quickReportForm = document.getElementById("quickReportForm");
-  if (!latestNode || !feedNode || !countNode) return;
+  if (!feedNode || !unreadNode) return;
 
   const newsItems = state.news.items || [];
-  countNode.textContent = String(newsItems.length);
+  const unread = unreadNewsCount(state);
+  unreadNode.textContent = String(unread);
+  unreadNode.hidden = unread <= 0;
 
   if (!newsItems.length) {
-    latestNode.innerHTML = `
-      <article class="news-empty">
-        <strong>等待第一条快报</strong>
-        <p>NEWS_BROADCAST 到达后会在这里显示。</p>
-      </article>
-    `;
-    feedNode.innerHTML = "";
+    feedNode.innerHTML = PLACEHOLDER;
     if (quickReportForm) {
       quickReportForm.hidden = true;
       quickReportForm.newsId.value = "";
@@ -150,17 +141,13 @@ function renderNews(state) {
     return;
   }
 
-  const latest = newsItems[0];
-  const latestResult = state.news.results[latest.newsId];
-  latestNode.innerHTML = renderNewsCard(latest, latestResult, true);
   feedNode.innerHTML = newsItems
-    .slice(1)
-    .map((item) => renderNewsCard(item, state.news.results[item.newsId], false))
+    .map((item, index) => renderNewsCard(item, state.news.results[item.newsId], index === 0))
     .join("");
 
   if (quickReportForm) {
     quickReportForm.hidden = state.connection.role !== "player";
-    quickReportForm.newsId.value = latest.newsId;
+    quickReportForm.newsId.value = newsItems[0].newsId;
   }
 }
 
@@ -193,7 +180,7 @@ function renderNewsCard(news, result, isLatest) {
   `;
 }
 
-function renderBookList(id, levels, side, maxQty) {
+function renderBookList(id, levels, side) {
   const node = document.getElementById(id);
   if (!node) return;
   if (!levels.length) {
@@ -202,15 +189,12 @@ function renderBookList(id, levels, side, maxQty) {
   }
 
   node.innerHTML = levels
-    .map((level) => {
-      const depth = Math.max(4, Math.round(((Number(level.quantity) || 0) / maxQty) * 100));
-      return `
-        <div class="book-row ${side}" style="--depth: ${depth}%">
+    .map((level) => `
+        <div class="book-row ${side}">
           <span>${formatNumber(level.price)}</span>
           <span>${formatNumber(level.quantity)}</span>
         </div>
-      `;
-    })
+      `)
     .join("");
 }
 
@@ -254,7 +238,7 @@ function renderDailySummaries(state) {
         <div class="day-summary-head">
           <strong>Day ${escapeHtml(summary.day)}</strong>
           <span>Winner: ${escapeHtml(summary.winnerToken || "Tie")}</span>
-          <button type="button" class="summary-link ghost-button" data-summary-day="${escapeAttribute(summary.day)}">查看完整总结</button>
+          <button type="button" class="summary-link ghost-button" data-action="open-summary" data-summary-day="${escapeAttribute(summary.day)}">查看完整总结</button>
         </div>
       </article>
     `)

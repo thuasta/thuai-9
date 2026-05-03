@@ -77,6 +77,7 @@ export function createInitialState(route = {}) {
       showSettlement: false,
       colorScheme: normalizeColorScheme(route.colorScheme || DEFAULT_COLOR_SCHEME),
       activeView: "main",
+      readNewsCount: 0,
     },
   };
 }
@@ -95,6 +96,23 @@ export function setMode(state, role) {
 export function setActiveView(state, view) {
   const nextView = String(view || "main");
   state.ui.activeView = VALID_VIEWS.has(nextView) ? nextView : "main";
+}
+
+export function markNewsAsRead(state) {
+  state.ui.readNewsCount = state.news.items.length;
+}
+
+export function resetUiCollections(state) {
+  state.events = [];
+  state.news.items = [];
+  state.news.results = {};
+  state.dailySummaries = [];
+  state.playerSummaries = {};
+  state.ui.readNewsCount = 0;
+}
+
+export function unreadNewsCount(state) {
+  return Math.max(0, state.news.items.length - state.ui.readNewsCount);
 }
 
 export function setCandleOptions(state, options) {

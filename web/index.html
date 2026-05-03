@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>璃月黄金交易所</title>
     <link rel="stylesheet" href="./styles.css">
-    <link rel="stylesheet" href="./layout.css">
   </head>
   <body>
     <div class="app-shell">
@@ -77,6 +76,10 @@
             <h2 id="viewTitle">主界面</h2>
           </div>
           <div class="header-tools">
+            <button id="newsOpenButton" type="button" class="news-bell" data-open-modal="newsModal">
+              <span>璃月快报</span>
+              <strong id="newsUnreadBadge" class="news-unread-badge" hidden>0</strong>
+            </button>
             <label>
               <span>价格</span>
               <select id="priceModeSelect">
@@ -136,25 +139,6 @@
                 </div>
               </section>
 
-              <section class="panel news-panel">
-                <div class="panel-head compact">
-                  <div>
-                    <p class="eyebrow">Liyue Bulletin</p>
-                    <h2>璃月快报</h2>
-                  </div>
-                  <strong id="newsCount" class="panel-count">0</strong>
-                </div>
-                <div id="latestNews" class="latest-news"></div>
-                <div id="newsFeed" class="news-feed auto-scroll"></div>
-                <form id="quickReportForm" class="quick-report player-only">
-                  <input name="newsId" type="hidden">
-                  <div class="report-actions" role="group" aria-label="研报方向">
-                    <button name="prediction" value="Long" type="submit">Long</button>
-                    <button name="prediction" value="Short" type="submit">Short</button>
-                    <button name="prediction" value="Hold" type="submit">Hold</button>
-                  </div>
-                </form>
-              </section>
             </div>
           </section>
 
@@ -350,6 +334,27 @@
           <button type="button" class="modal-close" data-close-modal="eventsModal">关闭</button>
         </div>
         <div id="eventFeed" class="event-feed modal-feed auto-scroll"></div>
+      </div>
+    </div>
+
+    <div id="newsModal" class="modal" hidden>
+      <div class="modal-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Liyue Bulletin</p>
+            <h2>璃月快报</h2>
+          </div>
+          <button type="button" class="modal-close" data-close-modal="newsModal">关闭</button>
+        </div>
+        <div id="newsFeed" class="news-feed modal-feed auto-scroll"></div>
+        <form id="quickReportForm" class="quick-report player-only">
+          <input name="newsId" type="hidden">
+          <div class="report-actions" role="group" aria-label="研报方向">
+            <button name="prediction" value="Long" type="submit">Long</button>
+            <button name="prediction" value="Short" type="submit">Short</button>
+            <button name="prediction" value="Hold" type="submit">Hold</button>
+          </div>
+        </form>
       </div>
     </div>
 

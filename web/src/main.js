@@ -13,7 +13,9 @@ import {
   applyMessage,
   clearSettlement,
   createInitialState,
+  markNewsAsRead,
   pushEvent,
+  resetUiCollections,
   routeFromLocation,
   setActiveView,
   setCandleOptions,
@@ -53,22 +55,23 @@ function bindControls() {
     renderApp(state);
   });
 
+  document.getElementById("dailySummary")?.addEventListener("pointerdown", handleSummaryInteraction, true);
+  document.getElementById("dailySummary")?.addEventListener("click", handleSummaryInteraction, true);
+
   document.body.addEventListener("click", (event) => {
     const openButton = event.target.closest("[data-open-modal]");
     if (openButton) {
+      if (openButton.dataset.openModal === "newsModal") {
+        markNewsAsRead(state);
+      }
       openModal(openButton.dataset.openModal);
+      renderApp(state);
       return;
     }
 
     const closeButton = event.target.closest("[data-close-modal]");
     if (closeButton) {
       closeModal(closeButton.dataset.closeModal);
-      return;
-    }
-
-    const summaryButton = event.target.closest("[data-summary-day]");
-    if (summaryButton) {
-      showSummaryDetail(Number(summaryButton.dataset.summaryDay));
       return;
     }
 
@@ -128,6 +131,15 @@ function bindControls() {
   });
 
   window.addEventListener("resize", () => renderApp(state));
+}
+
+function handleSummaryInteraction(event) {
+  const button = event.target.closest("[data-action='open-summary']");
+  if (!button) return;
+  if (event.type === "pointerdown") {
+    event.preventDefault();
+  }
+  showSummaryDetail(button.dataset.summaryDay);
 }
 
 function connect() {
@@ -295,11 +307,7 @@ function handleSkill(event) {
 
 function loadDemo() {
   disconnect(false);
-  state.events = [];
-  state.news.items = [];
-  state.news.results = {};
-  state.dailySummaries = [];
-  state.playerSummaries = {};
+  resetUiCollections(state);
   clearSettlement(state);
   for (const message of buildSampleMessages(state.connection.role)) {
     applyMessage(state, message);
@@ -308,7 +316,7 @@ function loadDemo() {
 }
 
 function showSummaryDetail(day) {
-  const summary = state.dailySummaries.find((item) => Number(item.day) === Number(day));
+  const summary = state.dailySummaries.find((item) => String(item.day) === String(day));
   if (!summary) return;
   const body = document.getElementById("detailModalBody");
   const title = document.getElementById("detailModalTitle");
