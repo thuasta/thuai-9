@@ -15,6 +15,7 @@ import {
   createInitialState,
   pushEvent,
   routeFromLocation,
+  setActiveView,
   setCandleOptions,
   setColorScheme,
   setConnectionPatch,
@@ -40,6 +41,41 @@ function bindControls() {
     setMode(state, button.dataset.mode);
     updateRoute();
     renderApp(state);
+  });
+
+  document.querySelector(".menu-panel")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view]");
+    if (!button) return;
+    if (state.connection.role !== "player" && (button.dataset.view === "info" || button.dataset.view === "debug")) {
+      return;
+    }
+    setActiveView(state, button.dataset.view);
+    renderApp(state);
+  });
+
+  document.body.addEventListener("click", (event) => {
+    const openButton = event.target.closest("[data-open-modal]");
+    if (openButton) {
+      openModal(openButton.dataset.openModal);
+      return;
+    }
+
+    const closeButton = event.target.closest("[data-close-modal]");
+    if (closeButton) {
+      closeModal(closeButton.dataset.closeModal);
+      return;
+    }
+
+    const summaryButton = event.target.closest("[data-summary-day]");
+    if (summaryButton) {
+      showSummaryDetail(Number(summaryButton.dataset.summaryDay));
+      return;
+    }
+
+    const playerButton = event.target.closest("[data-player-token]");
+    if (playerButton) {
+      showPlayerDetail(playerButton.dataset.playerToken);
+    }
   });
 
   document.getElementById("serverInput")?.addEventListener("change", (event) => {
@@ -258,42 +294,116 @@ function handleSkill(event) {
 }
 
 function loadDemo() {
-  for (const message of buildSampleMessages()) {
+  disconnect(false);
+  state.events = [];
+  state.news.items = [];
+  state.news.results = {};
+  state.dailySummaries = [];
+  state.playerSummaries = {};
+  clearSettlement(state);
+  for (const message of buildSampleMessages(state.connection.role)) {
     applyMessage(state, message);
   }
-  setConnectionPatch(state, {
-    status: "connected",
-    protocolVersion: "demo",
-  });
   renderApp(state);
 }
 
+function showSummaryDetail(day) {
+  const summary = state.dailySummaries.find((item) => Number(item.day) === Number(day));
+  if (!summary) return;
+  const body = document.getElementById("detailModalBody");
+  const title = document.getElementById("detailModalTitle");
+  const eyebrow = document.getElementById("detailModalEyebrow");
+  if (!body || !title || !eyebrow) return;
+
+  eyebrow.textContent = "Daily Summary";
+  title.textContent = `第 ${summary.day} 日总结`;
+  body.innerHTML = `
+    <section class="detail-section">
+      <h3>结算结果</h3>
+      <p>胜者：${escapeHtml(summary.winnerToken || "Tie")}</p>
+      <p>原因：${escapeHtml(summary.reason || "-")}</p>
+    </section>
+    <div class="detail-grid">
+      ${(summary.players || []).map((player) => `
+        <section class="detail-section">
+          <h3>${escapeHtml(player.token)}</h3>
+          <p>NAV：${escapeHtml(player.nav)}</p>
+          <p>Mora：${escapeHtml(player.mora)}</p>
+          <p>Gold：${escapeHtml(player.gold)}</p>
+          <p>Trades：${escapeHtml(player.tradeCount)}</p>
+          <p>Frozen Mora：${escapeHtml(player.frozenMora)}</p>
+          <p>Frozen Gold：${escapeHtml(player.frozenGold)}</p>
+          <p>Locked Gold：${escapeHtml(player.lockedGold)}</p>
+        </section>
+      `).join("")}
+    </div>
+  `;
+  openModal("detailModal");
+}
+
+function showPlayerDetail(token) {
+  const player = state.playerSummaries[token];
+  if (!player) return;
+  const body = document.getElementById("detailModalBody");
+  const title = document.getElementById("detailModalTitle");
+  const eyebrow = document.getElementById("detailModalEyebrow");
+  if (!body || !title || !eyebrow) return;
+
+  eyebrow.textContent = "Player";
+  title.textContent = `${token} 摘要`;
+  body.innerHTML = `
+    <section class="detail-section">
+      <h3>当前状态</h3>
+      <p>NAV：${escapeHtml(player.nav)}</p>
+      <p>Mora：${escapeHtml(player.mora)}</p>
+      <p>Gold：${escapeHtml(player.gold)}</p>
+      <p>Pending Orders：${escapeHtml(player.pendingOrderCount ?? 0)}</p>
+      <p>Active Cards：${escapeHtml((player.activeCards || []).join("、") || "暂无")}</p>
+    </section>
+  `;
+  openModal("detailModal");
+}
+
+function openModal(id) {
+  document.getElementById(id)?.removeAttribute("hidden");
+}
+
+function closeModal(id) {
+  document.getElementById(id)?.setAttribute("hidden", "");
+}
+
 function updateRoute() {
-  const params = new URLSearchParams();
-  params.set("mode", state.connection.role);
-  if (state.connection.role === "player") {
-    params.set("token", state.connection.token);
-  }
-  if (state.connection.server !== "ws://localhost:14514") {
-    params.set("server", state.connection.server);
-  }
-  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  const url = new URL(window.location.href);
+  url.searchParams.set("mode", state.connection.role);
+  url.searchParams.set("token", state.connection.token);
+  url.searchParams.set("server", state.connection.server);
+  window.history.replaceState({}, "", url);
 }
 
 function actionDetail(message) {
-  switch (message.messageType) {
-    case "LIMIT_BUY":
-    case "LIMIT_SELL":
-      return `price=${message.price} quantity=${message.quantity}`;
-    case "CANCEL_ORDER":
-      return `orderId=${message.orderId}`;
-    case "SUBMIT_REPORT":
-      return `newsId=${message.newsId} prediction=${message.prediction}`;
-    case "SELECT_STRATEGY":
-      return message.cardName;
-    case "ACTIVATE_SKILL":
-      return `${message.skillName}${message.direction ? ` ${message.direction}` : ""}`;
-    default:
-      return "";
+  if (message.messageType === "LIMIT_BUY" || message.messageType === "LIMIT_SELL") {
+    return `price=${message.price} qty=${message.quantity}`;
   }
+  if (message.messageType === "CANCEL_ORDER") {
+    return `orderId=${message.orderId}`;
+  }
+  if (message.messageType === "SUBMIT_REPORT") {
+    return `news=${message.newsId} ${message.prediction}`;
+  }
+  if (message.messageType === "SELECT_STRATEGY") {
+    return String(message.cardName || "");
+  }
+  if (message.messageType === "ACTIVATE_SKILL") {
+    return `${message.skillName || ""} ${message.direction || ""}`.trim();
+  }
+  return message.messageType;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }

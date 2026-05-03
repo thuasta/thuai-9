@@ -1,16 +1,29 @@
 import { applyColorScheme, COLOR_SCHEMES, readAppliedPalette } from "./appearance.js";
 
 const PLACEHOLDER = '<p class="placeholder">暂无数据</p>';
+const VIEW_TITLES = {
+  main: "主界面",
+  logs: "日志",
+  rankings: "排行",
+  info: "信息",
+  debug: "调试",
+};
 
 export function renderApp(state) {
   document.body.dataset.mode = state.connection.role;
   applyColorScheme(state.ui.colorScheme);
 
+  if (state.connection.role !== "player" && (state.ui.activeView === "info" || state.ui.activeView === "debug")) {
+    state.ui.activeView = "main";
+  }
+
   setText("stageValue", state.game.stage || "-");
   setText("dayValue", state.game.currentDay || "-");
   setText("tickValue", displayTick(state));
+  setText("viewTitle", VIEW_TITLES[state.ui.activeView] || "主界面");
   renderConnection(state);
   renderControls(state);
+  renderViewSwitch(state);
   renderScoreboard(state);
   renderPrices(state);
   renderOrderBook(state);
@@ -23,6 +36,7 @@ export function renderApp(state) {
   renderStrategy(state);
   renderSettlement(state);
   drawMarketChart(document.getElementById("marketCanvas"), state);
+  keepFeedsPinned();
 }
 
 function renderConnection(state) {
@@ -58,6 +72,15 @@ function renderControls(state) {
   });
 }
 
+function renderViewSwitch(state) {
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.view === state.ui.activeView);
+  });
+  document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.viewPanel === state.ui.activeView);
+  });
+}
+
 function renderScoreboard(state) {
   const node = document.getElementById("scoreboard");
   if (!node) return;
@@ -90,8 +113,8 @@ function renderPrices(state) {
 }
 
 function renderOrderBook(state) {
-  const bids = state.market.bids.slice(0, 10);
-  const asks = state.market.asks.slice(0, 10);
+  const bids = state.market.bids.slice(0, 12);
+  const asks = state.market.asks.slice(0, 12);
   const maxQty = Math.max(
     1,
     ...bids.map((level) => Number(level.quantity) || 0),
@@ -131,7 +154,7 @@ function renderNews(state) {
   const latestResult = state.news.results[latest.newsId];
   latestNode.innerHTML = renderNewsCard(latest, latestResult, true);
   feedNode.innerHTML = newsItems
-    .slice(1, 8)
+    .slice(1)
     .map((item) => renderNewsCard(item, state.news.results[item.newsId], false))
     .join("");
 
@@ -143,8 +166,8 @@ function renderNews(state) {
 
 function renderNewsCard(news, result, isLatest) {
   const fakeBadge = news.isFake
-    ? `<span class="news-badge danger">伪造</span>`
-    : `<span class="news-badge">公开</span>`;
+    ? '<span class="news-badge danger">伪造</span>'
+    : '<span class="news-badge">公开</span>';
   const source = news.sourcePlayer ? `<span>来源 ${escapeHtml(news.sourcePlayer)}</span>` : "";
   const resultMarkup = result
     ? `
@@ -192,22 +215,29 @@ function renderBookList(id, levels, side, maxQty) {
 }
 
 function renderEvents(state) {
-  const node = document.getElementById("eventFeed");
-  if (!node) return;
-  if (!state.events.length) {
-    node.innerHTML = PLACEHOLDER;
-    return;
-  }
+  const modalNode = document.getElementById("eventFeed");
+  const previewNode = document.getElementById("eventPreview");
+  const items = state.events.length
+    ? state.events.map((event) => eventMarkup(event)).join("")
+    : PLACEHOLDER;
 
-  node.innerHTML = state.events
-    .slice(0, 80)
-    .map((event) => `
-      <article class="event-item" data-kind="${escapeHtml(event.kind)}">
-        <strong>${escapeHtml(event.title)}</strong>
-        <p>D${escapeHtml(event.day || "-")} T${escapeHtml(event.tick || "-")} ${escapeHtml(event.detail)}</p>
-      </article>
-    `)
-    .join("");
+  if (modalNode) {
+    modalNode.innerHTML = items;
+  }
+  if (previewNode) {
+    previewNode.innerHTML = state.events.length
+      ? state.events.slice(0, 12).map((event) => eventMarkup(event)).join("")
+      : PLACEHOLDER;
+  }
+}
+
+function eventMarkup(event) {
+  return `
+    <article class="event-item" data-kind="${escapeHtml(event.kind)}">
+      <strong>${escapeHtml(event.title)}</strong>
+      <p>D${escapeHtml(event.day || "-")} T${escapeHtml(event.tick || "-")} ${escapeHtml(event.detail)}</p>
+    </article>
+  `;
 }
 
 function renderDailySummaries(state) {
@@ -219,42 +249,16 @@ function renderDailySummaries(state) {
   }
 
   node.innerHTML = state.dailySummaries
-    .map((summary) => {
-      const players = [...(summary.players || [])].sort((a, b) => String(a.token).localeCompare(String(b.token)));
-      return `
-        <article class="day-summary">
-          <div class="day-summary-head">
-            <strong>Day ${escapeHtml(summary.day)}</strong>
-            <span>Winner: ${escapeHtml(summary.winnerToken || "Tie")}</span>
-            <span>${escapeHtml(summary.reason || "-")}</span>
-          </div>
-          <div class="summary-player-grid">
-            ${players.map(renderSummaryPlayer).join("")}
-          </div>
-        </article>
-      `;
-    })
+    .map((summary) => `
+      <article class="day-summary">
+        <div class="day-summary-head">
+          <strong>Day ${escapeHtml(summary.day)}</strong>
+          <span>Winner: ${escapeHtml(summary.winnerToken || "Tie")}</span>
+          <button type="button" class="summary-link ghost-button" data-summary-day="${escapeAttribute(summary.day)}">查看完整总结</button>
+        </div>
+      </article>
+    `)
     .join("");
-}
-
-function renderSummaryPlayer(player) {
-  return `
-    <section class="summary-player">
-      <h3>${escapeHtml(player.token)}</h3>
-      <div class="summary-stats">
-        ${statCell("NAV", player.nav)}
-        ${statCell("Mora", player.mora)}
-        ${statCell("Gold", player.gold)}
-        ${statCell("Trades", player.tradeCount)}
-      </div>
-      <div class="summary-assets">
-        <span>Frozen Mora ${formatNumber(player.frozenMora)}</span>
-        <span>Frozen Gold ${formatNumber(player.frozenGold)}</span>
-        <span>Locked Gold ${formatNumber(player.lockedGold)}</span>
-      </div>
-      <div class="tag-row">${renderTags(player.activeCards || [])}</div>
-    </section>
-  `;
 }
 
 function renderPlayerComparison(state) {
@@ -268,16 +272,9 @@ function renderPlayerComparison(state) {
 
   node.innerHTML = summaries
     .map((player) => `
-      <article class="comparison-card">
+      <button type="button" class="comparison-card comparison-link" data-player-token="${escapeAttribute(player.token)}">
         <h3>${escapeHtml(player.token)}</h3>
-        <div class="comparison-stats">
-          ${statCell("NAV", player.nav)}
-          ${statCell("Mora", player.mora)}
-          ${statCell("Gold", player.gold)}
-          ${statCell("Orders", player.pendingOrderCount ?? 0)}
-        </div>
-        <div class="tag-row">${renderTags(player.activeCards || [])}</div>
-      </article>
+      </button>
     `)
     .join("");
 }
@@ -381,6 +378,12 @@ function renderSettlement(state) {
       `)
       .join("")}
   `;
+}
+
+function keepFeedsPinned() {
+  document.querySelectorAll(".auto-scroll").forEach((node) => {
+    node.scrollTop = 0;
+  });
 }
 
 export function drawMarketChart(canvas, state) {
