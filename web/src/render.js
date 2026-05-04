@@ -188,13 +188,21 @@ function renderBookList(id, levels, side) {
     return;
   }
 
+  const maxQuantity = Math.max(1, ...levels.map((level) => Number(level.quantity) || 0));
   node.innerHTML = levels
-    .map((level) => `
+    .map((level) => {
+      const quantity = Number(level.quantity) || 0;
+      const depth = quantity > 0
+        ? Math.min(100, Math.max(8, (quantity / maxQuantity) * 100))
+        : 0;
+      return `
         <div class="book-row ${side}">
+          <i class="book-depth" style="width: ${depth.toFixed(2)}%;" aria-hidden="true"></i>
           <span>${formatNumber(level.price)}</span>
           <span>${formatNumber(level.quantity)}</span>
         </div>
-      `)
+      `;
+    })
     .join("");
 }
 
