@@ -10,6 +10,7 @@ import { DEFAULT_COLOR_SCHEME, normalizeColorScheme } from "./appearance.js";
 const MAX_EVENTS = 160;
 const MAX_MARKET_HISTORY = 8000;
 const MAX_NEWS = 80;
+const VALID_VIEWS = new Set(["main", "logs", "rankings", "info", "debug"]);
 
 export function routeFromLocation(location) {
   const search = new URLSearchParams(location.search);
@@ -75,6 +76,8 @@ export function createInitialState(route = {}) {
       eventCounter: 0,
       showSettlement: false,
       colorScheme: normalizeColorScheme(route.colorScheme || DEFAULT_COLOR_SCHEME),
+      activeView: "main",
+      readNewsCount: 0,
     },
   };
 }
@@ -85,6 +88,31 @@ export function setConnectionPatch(state, patch) {
 
 export function setMode(state, role) {
   state.connection.role = role === "player" ? "player" : "observer";
+  if (state.connection.role !== "player" && (state.ui.activeView === "info" || state.ui.activeView === "debug")) {
+    state.ui.activeView = "main";
+  }
+}
+
+export function setActiveView(state, view) {
+  const nextView = String(view || "main");
+  state.ui.activeView = VALID_VIEWS.has(nextView) ? nextView : "main";
+}
+
+export function markNewsAsRead(state) {
+  state.ui.readNewsCount = state.news.items.length;
+}
+
+export function resetUiCollections(state) {
+  state.events = [];
+  state.news.items = [];
+  state.news.results = {};
+  state.dailySummaries = [];
+  state.playerSummaries = {};
+  state.ui.readNewsCount = 0;
+}
+
+export function unreadNewsCount(state) {
+  return Math.max(0, state.news.items.length - state.ui.readNewsCount);
 }
 
 export function setCandleOptions(state, options) {
