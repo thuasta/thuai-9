@@ -1357,3 +1357,40 @@ body[data-mode="player"] .quick-report.player-only {
 body[data-mode="player"] .view-panel.player-only {
   display: none;
 }
+
+.port-input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.port-prefix {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border-right: 1px solid var(--line);
+  line-height: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.port-input-group input {
+  border: none;
+  border-radius: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-button.observer-menu-item {
+  display: none;
+}
+
+body[data-mode="observer"] .menu-button.observer-menu-item {
+  display: flex;
+}

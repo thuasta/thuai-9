@@ -51,6 +51,9 @@ function bindControls() {
     if (state.connection.role !== "player" && (button.dataset.view === "info" || button.dataset.view === "debug")) {
       return;
     }
+    if (state.connection.role === "player" && button.dataset.view === "server-debug") {
+      return;
+    }
     setActiveView(state, button.dataset.view);
     renderApp(state);
   });
@@ -81,8 +84,9 @@ function bindControls() {
     }
   });
 
-  document.getElementById("serverInput")?.addEventListener("change", (event) => {
-    setConnectionPatch(state, { server: event.target.value.trim() || "ws://localhost:14514" });
+  document.getElementById("portInput")?.addEventListener("change", (event) => {
+    const port = event.target.value.trim() || "14514";
+    setConnectionPatch(state, { server: `ws://localhost:${port}` });
     updateRoute();
     renderApp(state);
   });
@@ -119,6 +123,13 @@ function bindControls() {
   document.getElementById("quickReportForm")?.addEventListener("submit", handleQuickReport);
   document.getElementById("skillForm")?.addEventListener("submit", handleSkill);
 
+  document.getElementById("serverOrderForm")?.addEventListener("submit", handleServerOrder);
+  document.getElementById("serverCancelForm")?.addEventListener("submit", handleServerCancel);
+  document.getElementById("serverReportForm")?.addEventListener("submit", handleServerReport);
+  document.getElementById("serverStrategyForm")?.addEventListener("submit", handleServerStrategy);
+  document.getElementById("serverSkillForm")?.addEventListener("submit", handleServerSkill);
+  document.getElementById("serverRawForm")?.addEventListener("submit", handleServerRaw);
+
   document.getElementById("strategyOptions")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-action='select-strategy']");
     if (!button) return;
@@ -142,6 +153,11 @@ function handleSummaryInteraction(event) {
   showSummaryDetail(button.dataset.summaryDay);
 }
 
+function serverUrlFromPort() {
+  const port = document.getElementById("portInput")?.value.trim() || "14514";
+  return `ws://localhost:${port}`;
+}
+
 function connect() {
   clearTimeout(reconnectTimer);
   manuallyClosed = false;
@@ -150,7 +166,7 @@ function connect() {
     ws.close();
   }
 
-  const server = document.getElementById("serverInput")?.value.trim() || state.connection.server;
+  const server = serverUrlFromPort();
   const token = document.getElementById("tokenInput")?.value.trim() || state.connection.token;
   setConnectionPatch(state, {
     server,
@@ -303,6 +319,58 @@ function handleSkill(event) {
     String(data.get("skillName") || "").trim(),
     data.get("direction"),
   ));
+}
+
+function serverDebugToken() {
+  return document.getElementById("serverDebugToken")?.value.trim() || state.connection.token;
+}
+
+function handleServerOrder(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const message = event.submitter?.value === "sell"
+    ? limitSellMessage(serverDebugToken(), data.get("price"), data.get("quantity"))
+    : limitBuyMessage(serverDebugToken(), data.get("price"), data.get("quantity"));
+  sendAction(message);
+}
+
+function handleServerCancel(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(cancelOrderMessage(serverDebugToken(), data.get("orderId")));
+}
+
+function handleServerReport(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(submitReportMessage(serverDebugToken(), data.get("newsId"), data.get("prediction")));
+}
+
+function handleServerStrategy(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(selectStrategyMessage(serverDebugToken(), data.get("cardName")));
+}
+
+function handleServerSkill(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(activateSkillMessage(serverDebugToken(), String(data.get("skillName") || "").trim(), data.get("direction")));
+}
+
+function handleServerRaw(event) {
+  event.preventDefault();
+  const raw = document.getElementById("serverRawJson")?.value.trim();
+  if (!raw) return;
+  let message;
+  try {
+    message = JSON.parse(raw);
+  } catch {
+    applyMessage(state, { messageType: "ERROR", errorCode: 1000, message: "JSON 解析失败" });
+    renderApp(state);
+    return;
+  }
+  sendAction(message);
 }
 
 function loadDemo() {

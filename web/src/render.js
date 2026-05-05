@@ -8,6 +8,7 @@ const VIEW_TITLES = {
   rankings: "排行",
   info: "信息",
   debug: "调试",
+  "server-debug": "服务器调试台",
 };
 
 export function renderApp(state) {
@@ -15,6 +16,9 @@ export function renderApp(state) {
   applyColorScheme(state.ui.colorScheme);
 
   if (state.connection.role !== "player" && (state.ui.activeView === "info" || state.ui.activeView === "debug")) {
+    state.ui.activeView = "main";
+  }
+  if (state.connection.role === "player" && state.ui.activeView === "server-debug") {
     state.ui.activeView = "main";
   }
 
@@ -55,13 +59,16 @@ function renderConnection(state) {
 }
 
 function renderControls(state) {
-  const serverInput = document.getElementById("serverInput");
+  const portInput = document.getElementById("portInput");
   const tokenInput = document.getElementById("tokenInput");
   const priceModeSelect = document.getElementById("priceModeSelect");
   const intervalSelect = document.getElementById("intervalSelect");
   const colorSchemeSelect = document.getElementById("colorSchemeSelect");
 
-  setInputValue(serverInput, state.connection.server);
+  if (portInput && document.activeElement !== portInput) {
+    const match = state.connection.server.match(/:(\d+)$/);
+    portInput.value = match ? match[1] : "14514";
+  }
   setInputValue(tokenInput, state.connection.token);
   setInputValue(priceModeSelect, state.market.priceField);
   setInputValue(intervalSelect, String(state.market.interval));

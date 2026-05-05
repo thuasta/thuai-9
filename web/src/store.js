@@ -10,16 +10,19 @@ import { DEFAULT_COLOR_SCHEME, normalizeColorScheme } from "./appearance.js";
 const MAX_EVENTS = 160;
 const MAX_MARKET_HISTORY = 8000;
 const MAX_NEWS = 80;
-const VALID_VIEWS = new Set(["main", "logs", "rankings", "info", "debug"]);
+const VALID_VIEWS = new Set(["main", "logs", "rankings", "info", "debug", "server-debug"]);
 
 export function routeFromLocation(location) {
   const search = new URLSearchParams(location.search);
   const pathMode = location.pathname.includes("player") ? "player" : "observer";
   const mode = search.get("mode") || pathMode;
+  const rawServer = search.get("server") || "ws://localhost:14514";
+  const portMatch = rawServer.match(/:(\d+)$/);
+  const port = portMatch ? portMatch[1] : "14514";
   return {
     role: mode === "player" ? "player" : "observer",
     token: search.get("token") || "player1",
-    server: search.get("server") || "ws://localhost:14514",
+    server: `ws://localhost:${port}`,
   };
 }
 
@@ -89,6 +92,9 @@ export function setConnectionPatch(state, patch) {
 export function setMode(state, role) {
   state.connection.role = role === "player" ? "player" : "observer";
   if (state.connection.role !== "player" && (state.ui.activeView === "info" || state.ui.activeView === "debug")) {
+    state.ui.activeView = "main";
+  }
+  if (state.connection.role === "player" && state.ui.activeView === "server-debug") {
     state.ui.activeView = "main";
   }
 }
