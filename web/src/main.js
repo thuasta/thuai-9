@@ -23,7 +23,14 @@ import {
   setConnectionPatch,
   setMode,
 } from "./store.js";
-import { renderApp } from "./render.js";
+import {
+  handleMarketChartPointerDown,
+  handleMarketChartPointerMove,
+  handleMarketChartPointerUp,
+  handleMarketChartWheel,
+  renderApp,
+  resetMarketChartViewport,
+} from "./render.js";
 import { applyColorScheme, loadColorScheme, saveColorScheme } from "./appearance.js";
 
 const state = createInitialState(routeFromLocation(window.location));
@@ -32,8 +39,11 @@ applyColorScheme(state.ui.colorScheme);
 let ws = null;
 let reconnectTimer = null;
 let manuallyClosed = false;
+let marketCanvasHandlersBound = false;
 
+initParticles();
 bindControls();
+bindMarketChartControls();
 renderApp(state);
 
 function bindControls() {
@@ -103,11 +113,13 @@ function bindControls() {
 
   document.getElementById("priceModeSelect")?.addEventListener("change", (event) => {
     setCandleOptions(state, { priceField: event.target.value });
+    resetMarketChartViewport();
     renderApp(state);
   });
 
   document.getElementById("intervalSelect")?.addEventListener("change", (event) => {
     setCandleOptions(state, { interval: event.target.value });
+    resetMarketChartViewport();
     renderApp(state);
   });
 
@@ -142,6 +154,35 @@ function bindControls() {
   });
 
   window.addEventListener("resize", () => renderApp(state));
+}
+
+function bindMarketChartControls() {
+  if (marketCanvasHandlersBound) return;
+  const canvas = document.getElementById("marketCanvas");
+  if (!canvas) return;
+  marketCanvasHandlersBound = true;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    handleMarketChartPointerDown(canvas, event, state);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (handleMarketChartPointerMove(canvas, event, state)) {
+      renderApp(state);
+    }
+  });
+  canvas.addEventListener("pointerup", (event) => {
+    handleMarketChartPointerUp(canvas, event);
+    renderApp(state);
+  });
+  canvas.addEventListener("pointercancel", (event) => {
+    handleMarketChartPointerUp(canvas, event);
+    renderApp(state);
+  });
+  canvas.addEventListener("wheel", (event) => {
+    if (handleMarketChartWheel(canvas, event, state)) {
+      renderApp(state);
+    }
+  }, { passive: false });
 }
 
 function handleSummaryInteraction(event) {
@@ -377,6 +418,7 @@ function loadDemo() {
   disconnect(false);
   resetUiCollections(state);
   clearSettlement(state);
+  resetMarketChartViewport();
   for (const message of buildSampleMessages(state.connection.role)) {
     applyMessage(state, message);
   }
@@ -391,7 +433,7 @@ function showSummaryDetail(day) {
   const eyebrow = document.getElementById("detailModalEyebrow");
   if (!body || !title || !eyebrow) return;
 
-  eyebrow.textContent = "Daily Summary";
+  eyebrow.textContent = "每日总结";
   title.textContent = `第 ${summary.day} 日总结`;
   body.innerHTML = `
     <section class="detail-section">
@@ -425,7 +467,7 @@ function showPlayerDetail(token) {
   const eyebrow = document.getElementById("detailModalEyebrow");
   if (!body || !title || !eyebrow) return;
 
-  eyebrow.textContent = "Player";
+  eyebrow.textContent = "操盘手";
   title.textContent = `${token} 摘要`;
   body.innerHTML = `
     <section class="detail-section">
@@ -482,4 +524,46 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function initParticles() {
+  const canvas = document.getElementById("particles-bg");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  const COUNT = 50;
+  const particles = Array.from({ length: COUNT }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: 0.8 + Math.random() * 2,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+    alpha: 0.1 + Math.random() * 0.3,
+  }));
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(200, 168, 75, ${p.alpha})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
 }

@@ -3,4 +3,7 @@
 .claude
 .codex
 .vscode
-server/data 
+**superpowers/
+web/image/
+server/data
+**/node_modules/
