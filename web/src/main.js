@@ -23,7 +23,14 @@ import {
   setConnectionPatch,
   setMode,
 } from "./store.js";
-import { renderApp } from "./render.js";
+import {
+  handleMarketChartPointerDown,
+  handleMarketChartPointerMove,
+  handleMarketChartPointerUp,
+  handleMarketChartWheel,
+  renderApp,
+  resetMarketChartViewport,
+} from "./render.js";
 import { applyColorScheme, loadColorScheme, saveColorScheme } from "./appearance.js";
 
 const state = createInitialState(routeFromLocation(window.location));
@@ -32,8 +39,11 @@ applyColorScheme(state.ui.colorScheme);
 let ws = null;
 let reconnectTimer = null;
 let manuallyClosed = false;
+let marketCanvasHandlersBound = false;
 
+initParticles();
 bindControls();
+bindMarketChartControls();
 renderApp(state);
 
 function bindControls() {
@@ -49,6 +59,9 @@ function bindControls() {
     const button = event.target.closest("[data-view]");
     if (!button) return;
     if (state.connection.role !== "player" && (button.dataset.view === "info" || button.dataset.view === "debug")) {
+      return;
+    }
+    if (state.connection.role === "player" && button.dataset.view === "server-debug") {
       return;
     }
     setActiveView(state, button.dataset.view);
@@ -81,8 +94,9 @@ function bindControls() {
     }
   });
 
-  document.getElementById("serverInput")?.addEventListener("change", (event) => {
-    setConnectionPatch(state, { server: event.target.value.trim() || "ws://localhost:14514" });
+  document.getElementById("portInput")?.addEventListener("change", (event) => {
+    const port = event.target.value.trim() || "14514";
+    setConnectionPatch(state, { server: `ws://localhost:${port}` });
     updateRoute();
     renderApp(state);
   });
@@ -99,11 +113,13 @@ function bindControls() {
 
   document.getElementById("priceModeSelect")?.addEventListener("change", (event) => {
     setCandleOptions(state, { priceField: event.target.value });
+    resetMarketChartViewport();
     renderApp(state);
   });
 
   document.getElementById("intervalSelect")?.addEventListener("change", (event) => {
     setCandleOptions(state, { interval: event.target.value });
+    resetMarketChartViewport();
     renderApp(state);
   });
 
@@ -119,6 +135,13 @@ function bindControls() {
   document.getElementById("quickReportForm")?.addEventListener("submit", handleQuickReport);
   document.getElementById("skillForm")?.addEventListener("submit", handleSkill);
 
+  document.getElementById("serverOrderForm")?.addEventListener("submit", handleServerOrder);
+  document.getElementById("serverCancelForm")?.addEventListener("submit", handleServerCancel);
+  document.getElementById("serverReportForm")?.addEventListener("submit", handleServerReport);
+  document.getElementById("serverStrategyForm")?.addEventListener("submit", handleServerStrategy);
+  document.getElementById("serverSkillForm")?.addEventListener("submit", handleServerSkill);
+  document.getElementById("serverRawForm")?.addEventListener("submit", handleServerRaw);
+
   document.getElementById("strategyOptions")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-action='select-strategy']");
     if (!button) return;
@@ -133,6 +156,35 @@ function bindControls() {
   window.addEventListener("resize", () => renderApp(state));
 }
 
+function bindMarketChartControls() {
+  if (marketCanvasHandlersBound) return;
+  const canvas = document.getElementById("marketCanvas");
+  if (!canvas) return;
+  marketCanvasHandlersBound = true;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    handleMarketChartPointerDown(canvas, event, state);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (handleMarketChartPointerMove(canvas, event, state)) {
+      renderApp(state);
+    }
+  });
+  canvas.addEventListener("pointerup", (event) => {
+    handleMarketChartPointerUp(canvas, event);
+    renderApp(state);
+  });
+  canvas.addEventListener("pointercancel", (event) => {
+    handleMarketChartPointerUp(canvas, event);
+    renderApp(state);
+  });
+  canvas.addEventListener("wheel", (event) => {
+    if (handleMarketChartWheel(canvas, event, state)) {
+      renderApp(state);
+    }
+  }, { passive: false });
+}
+
 function handleSummaryInteraction(event) {
   const button = event.target.closest("[data-action='open-summary']");
   if (!button) return;
@@ -140,6 +192,11 @@ function handleSummaryInteraction(event) {
     event.preventDefault();
   }
   showSummaryDetail(button.dataset.summaryDay);
+}
+
+function serverUrlFromPort() {
+  const port = document.getElementById("portInput")?.value.trim() || "14514";
+  return `ws://localhost:${port}`;
 }
 
 function connect() {
@@ -150,7 +207,7 @@ function connect() {
     ws.close();
   }
 
-  const server = document.getElementById("serverInput")?.value.trim() || state.connection.server;
+  const server = serverUrlFromPort();
   const token = document.getElementById("tokenInput")?.value.trim() || state.connection.token;
   setConnectionPatch(state, {
     server,
@@ -305,10 +362,63 @@ function handleSkill(event) {
   ));
 }
 
+function serverDebugToken() {
+  return document.getElementById("serverDebugToken")?.value.trim() || state.connection.token;
+}
+
+function handleServerOrder(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const message = event.submitter?.value === "sell"
+    ? limitSellMessage(serverDebugToken(), data.get("price"), data.get("quantity"))
+    : limitBuyMessage(serverDebugToken(), data.get("price"), data.get("quantity"));
+  sendAction(message);
+}
+
+function handleServerCancel(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(cancelOrderMessage(serverDebugToken(), data.get("orderId")));
+}
+
+function handleServerReport(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(submitReportMessage(serverDebugToken(), data.get("newsId"), data.get("prediction")));
+}
+
+function handleServerStrategy(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(selectStrategyMessage(serverDebugToken(), data.get("cardName")));
+}
+
+function handleServerSkill(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  sendAction(activateSkillMessage(serverDebugToken(), String(data.get("skillName") || "").trim(), data.get("direction")));
+}
+
+function handleServerRaw(event) {
+  event.preventDefault();
+  const raw = document.getElementById("serverRawJson")?.value.trim();
+  if (!raw) return;
+  let message;
+  try {
+    message = JSON.parse(raw);
+  } catch {
+    applyMessage(state, { messageType: "ERROR", errorCode: 1000, message: "JSON 解析失败" });
+    renderApp(state);
+    return;
+  }
+  sendAction(message);
+}
+
 function loadDemo() {
   disconnect(false);
   resetUiCollections(state);
   clearSettlement(state);
+  resetMarketChartViewport();
   for (const message of buildSampleMessages(state.connection.role)) {
     applyMessage(state, message);
   }
@@ -323,7 +433,7 @@ function showSummaryDetail(day) {
   const eyebrow = document.getElementById("detailModalEyebrow");
   if (!body || !title || !eyebrow) return;
 
-  eyebrow.textContent = "Daily Summary";
+  eyebrow.textContent = "每日总结";
   title.textContent = `第 ${summary.day} 日总结`;
   body.innerHTML = `
     <section class="detail-section">
@@ -357,7 +467,7 @@ function showPlayerDetail(token) {
   const eyebrow = document.getElementById("detailModalEyebrow");
   if (!body || !title || !eyebrow) return;
 
-  eyebrow.textContent = "Player";
+  eyebrow.textContent = "操盘手";
   title.textContent = `${token} 摘要`;
   body.innerHTML = `
     <section class="detail-section">
@@ -414,4 +524,46 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function initParticles() {
+  const canvas = document.getElementById("particles-bg");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  const COUNT = 50;
+  const particles = Array.from({ length: COUNT }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: 0.8 + Math.random() * 2,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+    alpha: 0.1 + Math.random() * 0.3,
+  }));
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(200, 168, 75, ${p.alpha})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
 }

@@ -3,16 +3,33 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>璃月黄金交易所</title>
+    <title>华清街大亨</title>
+    <script defer src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+    <canvas id="particles-bg"></canvas>
+
+    <div class="ticker-bar" id="tickerBar">
+      <div class="ticker-label">黄金 LIVE</div>
+      <div class="ticker-scroll-wrap">
+        <div class="ticker-track" id="tickerTrack">
+          <span class="ticker-item">等待行情数据...</span>
+        </div>
+      </div>
+      <div class="ticker-time" id="tickerTime">—</div>
+    </div>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="sidebar-head">
-          <div class="brand-block">
-            <p class="eyebrow">THUAI-9</p>
-            <h1>璃月黄金交易所</h1>
+          <div class="brand-image-wrap">
+            <img src="./assets/sidebar-brand.png" alt="华清街大亨" onerror="this.hidden=true">
+            <div class="brand-image-fallback">
+              <span class="brand-icon">⬡</span>
+              <span class="brand-name">华清街大亨</span>
+              <span class="brand-sub">Gold Exchange</span>
+            </div>
           </div>
 
           <div class="top-metrics">
@@ -34,17 +51,20 @@
 
         <section class="control-strip" aria-label="connection controls">
           <div class="segmented" id="modeTabs">
-            <button type="button" data-mode="observer">Observer</button>
-            <button type="button" data-mode="player">Player</button>
+            <button type="button" data-mode="observer">旁观者</button>
+            <button type="button" data-mode="player">操盘手</button>
           </div>
 
           <label class="field">
-            <span>Server</span>
-            <input id="serverInput" type="url" value="ws://localhost:14514" spellcheck="false">
+            <span>服务器</span>
+            <div class="port-input-group">
+              <span class="port-prefix">ws://localhost:</span>
+              <input id="portInput" type="number" min="1" max="65535" step="1" value="14514" spellcheck="false">
+            </div>
           </label>
 
           <label class="field">
-            <span>Token</span>
+            <span>令牌</span>
             <input id="tokenInput" type="text" value="player1" spellcheck="false">
           </label>
 
@@ -61,23 +81,24 @@
         </section>
 
         <nav class="menu-panel" aria-label="主菜单">
-          <button type="button" class="menu-button" data-view="main">主界面</button>
-          <button type="button" class="menu-button" data-view="logs">日志</button>
-          <button type="button" class="menu-button" data-view="rankings">排行</button>
-          <button type="button" class="menu-button player-menu-item" data-view="info">信息</button>
-          <button type="button" class="menu-button player-menu-item" data-view="debug">调试</button>
+          <button type="button" class="menu-button" data-view="main">交易大厅</button>
+          <button type="button" class="menu-button" data-view="logs">市场动态</button>
+          <button type="button" class="menu-button" data-view="rankings">富豪榜</button>
+          <button type="button" class="menu-button player-menu-item" data-view="info">我的账户</button>
+          <button type="button" class="menu-button player-menu-item" data-view="debug">操盘台</button>
+          <button type="button" class="menu-button observer-menu-item" data-view="server-debug">服务器控制台</button>
         </nav>
       </aside>
 
       <main class="main-shell">
         <header class="main-header">
           <div>
-            <p class="eyebrow">Control Room</p>
-            <h2 id="viewTitle">主界面</h2>
+            <p class="eyebrow">华清街黄金交易所</p>
+            <h2 id="viewTitle">交易大厅</h2>
           </div>
           <div class="header-tools">
             <button id="newsOpenButton" type="button" class="news-bell" data-open-modal="newsModal">
-              <span>璃月快报</span>
+              <span>华清快报</span>
               <strong id="newsUnreadBadge" class="news-unread-badge" hidden>0</strong>
             </button>
             <label>
@@ -105,7 +126,7 @@
               <section class="panel market-panel">
                 <div class="panel-head">
                   <div>
-                    <p class="eyebrow">Market</p>
+                    <p class="eyebrow">行情</p>
                     <h2>K 线与成交量</h2>
                   </div>
                 </div>
@@ -115,7 +136,7 @@
               <section class="panel price-panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Book</p>
+                    <p class="eyebrow">盘口</p>
                     <h2>盘口</h2>
                   </div>
                 </div>
@@ -147,7 +168,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Timeline</p>
+                    <p class="eyebrow">实时</p>
                     <h2>事件流</h2>
                   </div>
                   <button type="button" class="ghost-button" data-open-modal="eventsModal">查看全部</button>
@@ -158,7 +179,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Daily Summary</p>
+                    <p class="eyebrow">每日</p>
                     <h2>每日总结</h2>
                   </div>
                 </div>
@@ -172,7 +193,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Scores</p>
+                    <p class="eyebrow">排名</p>
                     <h2>比分</h2>
                   </div>
                 </div>
@@ -182,7 +203,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Observer</p>
+                    <p class="eyebrow">大亨</p>
                     <h2>玩家摘要</h2>
                   </div>
                 </div>
@@ -196,7 +217,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Player</p>
+                    <p class="eyebrow">账户</p>
                     <h2>资产</h2>
                   </div>
                 </div>
@@ -206,7 +227,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Orders</p>
+                    <p class="eyebrow">挂单</p>
                     <h2>挂单</h2>
                   </div>
                 </div>
@@ -230,7 +251,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Strategy</p>
+                    <p class="eyebrow">策略</p>
                     <h2>策略</h2>
                   </div>
                 </div>
@@ -245,7 +266,7 @@
               <section class="panel">
                 <div class="panel-head compact">
                   <div>
-                    <p class="eyebrow">Actions</p>
+                    <p class="eyebrow">操盘</p>
                     <h2>手动操作</h2>
                   </div>
                 </div>
@@ -307,20 +328,120 @@
               </section>
             </div>
           </section>
+
+          <section class="view-panel" data-view-panel="server-debug">
+            <div class="view-grid debug-view-grid">
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <p class="eyebrow">控制台</p>
+                    <h2>服务器调试台</h2>
+                  </div>
+                </div>
+
+                <div class="action-form" style="border-top:0;padding-top:0">
+                  <label>
+                    <span>令牌 (覆盖)</span>
+                    <input id="serverDebugToken" type="text" placeholder="player1" spellcheck="false">
+                  </label>
+                </div>
+
+                <form id="serverOrderForm" class="action-form">
+                  <label>
+                    <span>价格</span>
+                    <input name="price" type="number" min="1" step="1" required>
+                  </label>
+                  <label>
+                    <span>数量</span>
+                    <input name="quantity" type="number" min="1" step="1" required>
+                  </label>
+                  <div class="button-row">
+                    <button class="side-button buy" name="side" value="buy" type="submit">买入</button>
+                    <button class="side-button sell" name="side" value="sell" type="submit">卖出</button>
+                  </div>
+                </form>
+
+                <form id="serverCancelForm" class="action-form two-column">
+                  <label>
+                    <span>Order ID</span>
+                    <input name="orderId" type="number" min="1" step="1" required>
+                  </label>
+                  <button type="submit">撤单</button>
+                </form>
+
+                <form id="serverReportForm" class="action-form">
+                  <label>
+                    <span>News ID</span>
+                    <input name="newsId" type="number" min="1" step="1" required>
+                  </label>
+                  <label>
+                    <span>方向</span>
+                    <select name="prediction">
+                      <option value="Long">Long</option>
+                      <option value="Short">Short</option>
+                      <option value="Hold">Hold</option>
+                    </select>
+                  </label>
+                  <button type="submit">提交研报</button>
+                </form>
+
+                <form id="serverStrategyForm" class="action-form two-column">
+                  <label>
+                    <span>Card Name</span>
+                    <input name="cardName" type="text" placeholder="基建A" required>
+                  </label>
+                  <button type="submit">选择策略</button>
+                </form>
+
+                <form id="serverSkillForm" class="action-form">
+                  <label>
+                    <span>技能</span>
+                    <input name="skillName" type="text" placeholder="暗池交易" required>
+                  </label>
+                  <label>
+                    <span>方向</span>
+                    <select name="direction">
+                      <option value="">-</option>
+                      <option value="buy">buy</option>
+                      <option value="sell">sell</option>
+                    </select>
+                  </label>
+                  <button type="submit">激活技能</button>
+                </form>
+
+                <form id="serverRawForm" class="action-form" style="grid-template-columns:1fr">
+                  <label>
+                    <span>原始 JSON</span>
+                    <textarea id="serverRawJson" rows="4"
+                      style="width:100%;font-family:monospace;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px;resize:vertical"
+                      placeholder='{"messageType":"HELLO","role":"observer"}'></textarea>
+                  </label>
+                  <button type="submit">发送原始消息</button>
+                </form>
+              </section>
+            </div>
+          </section>
         </div>
       </main>
     </div>
 
     <div id="settlementModal" class="modal" hidden>
-      <div class="modal-panel">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Settlement</p>
-            <h2 id="settlementTitle">结算</h2>
+      <div class="modal-panel" style="padding:0;overflow:hidden;width:min(680px,100%)">
+        <div class="settlement-modal-inner">
+          <div class="settlement-art">
+            <img src="./assets/settlement-character.png" alt="" onerror="this.hidden=true">
+            <div class="settlement-art-fallback">
+              <span class="art-icon">🏆</span>
+              <span class="art-label">华清街大亨</span>
+            </div>
           </div>
-          <button id="closeSettlementButton" type="button">关闭</button>
+          <div class="settlement-data">
+            <div class="settlement-day-label">结算报告</div>
+            <h2 class="settlement-title" id="settlementTitle">结算</h2>
+            <div id="settlementBody" class="settlement-body"></div>
+            <button id="closeSettlementButton" type="button" class="primary-button" style="margin-top:auto">继续交易</button>
+          </div>
         </div>
-        <div id="settlementBody" class="settlement-body"></div>
       </div>
     </div>
 
@@ -328,10 +449,10 @@
       <div class="modal-panel">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Timeline</p>
+            <p class="eyebrow">实时</p>
             <h2>事件流</h2>
           </div>
-          <button type="button" class="modal-close" data-close-modal="eventsModal">关闭</button>
+          <button type="button" class="modal-close ghost-button" data-close-modal="eventsModal">关闭</button>
         </div>
         <div id="eventFeed" class="event-feed modal-feed auto-scroll"></div>
       </div>
@@ -341,10 +462,10 @@
       <div class="modal-panel">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Liyue Bulletin</p>
-            <h2>璃月快报</h2>
+            <p class="eyebrow">华清快报</p>
+            <h2>华清快报</h2>
           </div>
-          <button type="button" class="modal-close" data-close-modal="newsModal">关闭</button>
+          <button type="button" class="modal-close ghost-button" data-close-modal="newsModal">关闭</button>
         </div>
         <div id="newsFeed" class="news-feed modal-feed auto-scroll"></div>
         <form id="quickReportForm" class="quick-report player-only">
@@ -362,10 +483,10 @@
       <div class="modal-panel detail-modal-panel">
         <div class="panel-head">
           <div>
-            <p class="eyebrow" id="detailModalEyebrow">Details</p>
+            <p class="eyebrow" id="detailModalEyebrow">详情</p>
             <h2 id="detailModalTitle">详情</h2>
           </div>
-          <button type="button" class="modal-close" data-close-modal="detailModal">关闭</button>
+          <button type="button" class="modal-close ghost-button" data-close-modal="detailModal">关闭</button>
         </div>
         <div id="detailModalBody" class="detail-modal-body"></div>
       </div>
