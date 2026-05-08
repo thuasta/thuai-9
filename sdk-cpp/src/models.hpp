@@ -12,11 +12,13 @@ struct PriceLevel {
 
 struct OrderInfo {
     long orderId = 0;
+    int arrivalTick = 0;
     std::string side;
     long price = 0;
     int quantity = 0;
     int remainingQuantity = 0;
     std::string status;
+    std::string intent;
 };
 
 struct CardOption {
@@ -32,6 +34,7 @@ struct PlayerScore {
 
 struct GameState {
     std::string stage;
+    int currentMonth = 0;
     int currentDay = 0;
     int currentTick = 0;
     int totalTicks = 0;
@@ -54,11 +57,18 @@ struct PlayerState {
     int frozenGold = 0;
     int lockedGold = 0;
     long nav = 0;
+    int networkDelay = 0;
+    int immediateOrdersUsedToday = 0;
+    int restingOrdersUsedToday = 0;
+    int bonusImmediateOrdersToday = 0;
+    int monthlyTradeCount = 0;
     std::vector<std::string> activeCards;
     std::vector<OrderInfo> pendingOrders;
 };
 
 struct News {
+    int month = 0;
+    int day = 0;
     int newsId = 0;
     std::string content;
     int publishTick = 0;
@@ -66,6 +76,9 @@ struct News {
 
 struct ReportResult {
     int newsId = 0;
+    int submissionRank = 0;
+    int submitTick = 0;
+    int settlementTick = 0;
     std::string prediction;
     bool isCorrect = false;
     long reward = 0;
@@ -90,6 +103,7 @@ struct TradeNotification {
 struct SkillEffect {
     std::string skillName;
     std::string sourcePlayer;
+    std::optional<std::string> targetPlayer;
     std::string description;
 };
 

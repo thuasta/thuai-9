@@ -85,14 +85,21 @@ class Agent:
             "cardName": card_name,
         })
 
-    async def activate_skill(self, skill_name: str, direction: str | None = None):
+    async def activate_skill(
+        self,
+        skill_name: str,
+        target_token: str | None = None,
+        variant: str | None = None,
+    ):
         msg: dict = {
             "messageType": "ACTIVATE_SKILL",
             "token": self.token,
             "skillName": skill_name,
         }
-        if direction:
-            msg["direction"] = direction
+        if target_token:
+            msg["targetToken"] = target_token
+        if variant:
+            msg["variant"] = variant
         await self._send(msg)
 
     # --- Event Loop ---
@@ -194,6 +201,7 @@ def _parse_game_state(data: dict) -> GameState:
     ]
     return GameState(
         stage=data.get("stage", ""),
+        current_month=data.get("currentMonth", 0),
         current_day=data.get("currentDay", 0),
         current_tick=data.get("currentTick", 0),
         total_ticks=data.get("totalTicks", 0),
@@ -224,11 +232,13 @@ def _parse_player_state(data: dict) -> PlayerState:
     orders = [
         OrderInfo(
             o["orderId"],
+            o.get("arrivalTick", 0),
             o["side"],
             o["price"],
             o["quantity"],
             o["remainingQuantity"],
             o["status"],
+            o.get("intent", ""),
         )
         for o in data.get("pendingOrders", []) or []
     ]
@@ -239,6 +249,11 @@ def _parse_player_state(data: dict) -> PlayerState:
         frozen_gold=data.get("frozenGold", 0),
         locked_gold=data.get("lockedGold", 0),
         nav=data.get("nav", 0),
+        network_delay=data.get("networkDelay", 0),
+        immediate_orders_used_today=data.get("immediateOrdersUsedToday", 0),
+        resting_orders_used_today=data.get("restingOrdersUsedToday", 0),
+        bonus_immediate_orders_today=data.get("bonusImmediateOrdersToday", 0),
+        monthly_trade_count=data.get("monthlyTradeCount", 0),
         active_cards=data.get("activeCards", []) or [],
         pending_orders=orders,
     )
@@ -246,6 +261,8 @@ def _parse_player_state(data: dict) -> PlayerState:
 
 def _parse_news(data: dict) -> News:
     return News(
+        data.get("month", 0),
+        data.get("day", 0),
         data.get("newsId", 0),
         data.get("content", ""),
         data.get("publishTick", 0),
@@ -255,6 +272,9 @@ def _parse_news(data: dict) -> News:
 def _parse_report_result(data: dict) -> ReportResult:
     return ReportResult(
         data.get("newsId", 0),
+        data.get("submissionRank", 0),
+        data.get("submitTick", 0),
+        data.get("settlementTick", 0),
         data.get("prediction", ""),
         data.get("isCorrect", False),
         data.get("reward", 0),
@@ -290,5 +310,6 @@ def _parse_skill_effect(data: dict) -> SkillEffect:
     return SkillEffect(
         data.get("skillName", ""),
         data.get("sourcePlayer", ""),
+        data.get("targetPlayer"),
         data.get("description", ""),
     )

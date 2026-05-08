@@ -41,9 +41,13 @@ public:
         send({{"messageType", "SELECT_STRATEGY"}, {"token", token_}, {"cardName", cardName}});
     }
 
-    void activateSkill(const std::string& skillName, const std::string& direction = "") {
+    void activateSkill(
+        const std::string& skillName,
+        const std::string& targetToken = "",
+        const std::string& variant = "") {
         json msg = {{"messageType", "ACTIVATE_SKILL"}, {"token", token_}, {"skillName", skillName}};
-        if (!direction.empty()) msg["direction"] = direction;
+        if (!targetToken.empty()) msg["targetToken"] = targetToken;
+        if (!variant.empty()) msg["variant"] = variant;
         send(msg);
     }
 
@@ -141,6 +145,7 @@ private:
     static GameState parseGameState(const json& d) {
         GameState state;
         state.stage = d.value("stage", "");
+        state.currentMonth = d.value("currentMonth", 0);
         state.currentDay = d.value("currentDay", 0);
         state.currentTick = d.value("currentTick", 0);
         state.totalTicks = d.value("totalTicks", 0);
@@ -188,6 +193,11 @@ private:
         state.frozenGold = d.value("frozenGold", 0);
         state.lockedGold = d.value("lockedGold", 0);
         state.nav = d.value("nav", 0L);
+        state.networkDelay = d.value("networkDelay", 0);
+        state.immediateOrdersUsedToday = d.value("immediateOrdersUsedToday", 0);
+        state.restingOrdersUsedToday = d.value("restingOrdersUsedToday", 0);
+        state.bonusImmediateOrdersToday = d.value("bonusImmediateOrdersToday", 0);
+        state.monthlyTradeCount = d.value("monthlyTradeCount", 0);
         if (d.contains("activeCards") && d["activeCards"].is_array()) {
             for (const auto& c : d["activeCards"]) {
                 if (c.is_string()) {
@@ -199,11 +209,13 @@ private:
             for (const auto& o : d["pendingOrders"]) {
                 OrderInfo oi;
                 oi.orderId = o.value("orderId", 0L);
+                oi.arrivalTick = o.value("arrivalTick", 0);
                 oi.side = o.value("side", "");
                 oi.price = o.value("price", 0L);
                 oi.quantity = o.value("quantity", 0);
                 oi.remainingQuantity = o.value("remainingQuantity", 0);
                 oi.status = o.value("status", "");
+                oi.intent = o.value("intent", "");
                 state.pendingOrders.push_back(oi);
             }
         }
@@ -212,6 +224,8 @@ private:
 
     static News parseNews(const json& d) {
         News news;
+        news.month = d.value("month", 0);
+        news.day = d.value("day", 0);
         news.newsId = d.value("newsId", 0);
         news.content = d.value("content", "");
         news.publishTick = d.value("publishTick", 0);
@@ -221,6 +235,9 @@ private:
     static ReportResult parseReportResult(const json& d) {
         ReportResult result;
         result.newsId = d.value("newsId", 0);
+        result.submissionRank = d.value("submissionRank", 0);
+        result.submitTick = d.value("submitTick", 0);
+        result.settlementTick = d.value("settlementTick", 0);
         result.prediction = d.value("prediction", "");
         result.isCorrect = d.value("isCorrect", false);
         result.reward = d.value("reward", 0L);
@@ -259,6 +276,9 @@ private:
         SkillEffect effect;
         effect.skillName = d.value("skillName", "");
         effect.sourcePlayer = d.value("sourcePlayer", "");
+        if (d.contains("targetPlayer") && !d["targetPlayer"].is_null()) {
+            effect.targetPlayer = d.value("targetPlayer", std::string(""));
+        }
         effect.description = d.value("description", "");
         return effect;
     }

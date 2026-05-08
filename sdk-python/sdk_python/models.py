@@ -26,11 +26,13 @@ class PriceLevel:
 @dataclass
 class OrderInfo:
     order_id: int
+    arrival_tick: int
     side: str
     price: int
     quantity: int
     remaining_quantity: int
     status: str
+    intent: str = ""
 
 
 @dataclass
@@ -49,6 +51,7 @@ class PlayerScore:
 @dataclass
 class GameState:
     stage: str = ""
+    current_month: int = 0
     current_day: int = 0
     current_tick: int = 0
     total_ticks: int = 0
@@ -73,12 +76,19 @@ class PlayerState:
     frozen_gold: int = 0
     locked_gold: int = 0
     nav: int = 0
+    network_delay: int = 0
+    immediate_orders_used_today: int = 0
+    resting_orders_used_today: int = 0
+    bonus_immediate_orders_today: int = 0
+    monthly_trade_count: int = 0
     active_cards: list[str] = field(default_factory=list)
     pending_orders: list[OrderInfo] = field(default_factory=list)
 
 
 @dataclass
 class News:
+    month: int = 0
+    day: int = 0
     news_id: int = 0
     content: str = ""
     publish_tick: int = 0
@@ -87,6 +97,9 @@ class News:
 @dataclass
 class ReportResult:
     news_id: int = 0
+    submission_rank: int = 0
+    submit_tick: int = 0
+    settlement_tick: int = 0
     prediction: str = ""
     is_correct: bool = False
     reward: int = 0
@@ -114,4 +127,5 @@ class TradeNotification:
 class SkillEffect:
     skill_name: str = ""
     source_player: str = ""
+    target_player: str | None = None
     description: str = ""
