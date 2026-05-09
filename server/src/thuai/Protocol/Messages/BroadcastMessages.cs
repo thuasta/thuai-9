@@ -321,3 +321,87 @@ public record ErrorMessage : Message
     [JsonPropertyName("message")]
     public string ErrorText { get; init; } = "";
 }
+
+// --- Debug responses (delivered to the requesting admin socket) ---
+
+public record DebugAckMessage : Message
+{
+    public override string MessageType => "DEBUG_ACK";
+
+    [JsonPropertyName("command")]
+    public string Command { get; init; } = "";
+
+    [JsonPropertyName("ok")]
+    public bool Ok { get; init; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; init; }
+}
+
+public record DebugQueryResponseMessage : Message
+{
+    public override string MessageType => "DEBUG_QUERY_RESPONSE";
+
+    [JsonPropertyName("stage")]
+    public string Stage { get; init; } = "";
+
+    [JsonPropertyName("currentMonth")]
+    public int CurrentMonth { get; init; }
+
+    [JsonPropertyName("currentDay")]
+    public int CurrentDay { get; init; }
+
+    [JsonPropertyName("currentTick")]
+    public int CurrentTick { get; init; }
+
+    [JsonPropertyName("scoreboard")]
+    public Dictionary<string, int>? Scoreboard { get; init; }
+
+    [JsonPropertyName("cumulativeNavs")]
+    public Dictionary<string, long>? CumulativeNavs { get; init; }
+
+    [JsonPropertyName("players")]
+    public List<DebugPlayerSnapshot>? Players { get; init; }
+
+    [JsonPropertyName("draft")]
+    public DebugDraftSnapshot? Draft { get; init; }
+}
+
+public record DebugPlayerSnapshot
+{
+    [JsonPropertyName("token")]
+    public string Token { get; init; } = "";
+
+    [JsonPropertyName("mora")]
+    public long Mora { get; init; }
+
+    [JsonPropertyName("frozenMora")]
+    public long FrozenMora { get; init; }
+
+    [JsonPropertyName("gold")]
+    public int Gold { get; init; }
+
+    [JsonPropertyName("frozenGold")]
+    public int FrozenGold { get; init; }
+
+    [JsonPropertyName("lockedGold")]
+    public int LockedGold { get; init; }
+
+    [JsonPropertyName("monthlyTradeCount")]
+    public int MonthlyTradeCount { get; init; }
+
+    [JsonPropertyName("activeCards")]
+    public List<string>? ActiveCards { get; init; }
+}
+
+public record DebugDraftSnapshot
+{
+    [JsonPropertyName("infrastructure")]
+    public string? Infrastructure { get; init; }
+
+    [JsonPropertyName("riskControl")]
+    public string? RiskControl { get; init; }
+
+    [JsonPropertyName("finTech")]
+    public string? FinTech { get; init; }
+}
