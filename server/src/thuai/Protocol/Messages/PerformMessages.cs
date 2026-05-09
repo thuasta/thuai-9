@@ -2,6 +2,17 @@ namespace Thuai.Protocol.Messages;
 
 using System.Text.Json.Serialization;
 
+public record HelloMessage : PerformMessage
+{
+    public override string MessageType => "HELLO";
+
+    [JsonPropertyName("role")]
+    public string Role { get; init; } = "";
+
+    [JsonPropertyName("adminSecret")]
+    public string? AdminSecret { get; init; }
+}
+
 public record LimitBuyMessage : PerformMessage
 {
     public override string MessageType => "LIMIT_BUY";
@@ -63,4 +74,52 @@ public record ActivateSkillMessage : PerformMessage
 
     [JsonPropertyName("variant")]
     public string? Variant { get; init; }
+}
+
+// --- Debug messages (admin role only) ---
+
+public record DebugQueryMessage : PerformMessage
+{
+    public override string MessageType => "DEBUG_QUERY";
+}
+
+public record DebugGiveCardMessage : PerformMessage
+{
+    public override string MessageType => "DEBUG_GIVE_CARD";
+
+    [JsonPropertyName("targetToken")]
+    public string TargetToken { get; init; } = "";
+
+    [JsonPropertyName("cardName")]
+    public string CardName { get; init; } = "";
+}
+
+public record DebugInjectNewsMessage : PerformMessage
+{
+    public override string MessageType => "DEBUG_INJECT_NEWS";
+
+    [JsonPropertyName("sentiment")]
+    public string Sentiment { get; init; } = "";
+
+    [JsonPropertyName("content")]
+    public string? Content { get; init; }
+}
+
+public record DebugAdvanceStageMessage : PerformMessage
+{
+    public override string MessageType => "DEBUG_ADVANCE_STAGE";
+}
+
+public record DebugSetPlayerMessage : PerformMessage
+{
+    public override string MessageType => "DEBUG_SET_PLAYER";
+
+    [JsonPropertyName("targetToken")]
+    public string TargetToken { get; init; } = "";
+
+    [JsonPropertyName("mora")]
+    public long? Mora { get; init; }
+
+    [JsonPropertyName("gold")]
+    public int? Gold { get; init; }
 }

@@ -22,7 +22,14 @@ public partial class AgentServer
         public string Token { get; init; } = "";
     }
 
+    public class AfterAdminMessageEventArgs : EventArgs
+    {
+        public Guid SocketId { get; init; }
+        public PerformMessage Message { get; init; } = null!;
+    }
+
     public event EventHandler<AfterMessageReceiveEventArgs>? AfterMessageReceiveEvent;
     public event EventHandler<AfterPlayerConnectEventArgs>? AfterPlayerConnectEvent;
     public event EventHandler<AfterPlayerDisconnectEventArgs>? AfterPlayerDisconnectEvent;
+    public event EventHandler<AfterAdminMessageEventArgs>? AfterAdminMessageEvent;
 }

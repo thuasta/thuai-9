@@ -204,6 +204,20 @@ public partial class Game
     }
 
     /// <summary>
+    /// Force-exit the Waiting stage. Intended for admin debug use to start
+    /// the game without configuring a low PlayerWaitingTicks. Has no effect
+    /// outside of Waiting.
+    /// </summary>
+    public void SkipWaiting()
+    {
+        lock (_lock)
+        {
+            if (Stage == GameStage.Waiting && Players.Count >= _settings.MinimumPlayerCount)
+                _waitingTicksRemaining = 0;
+        }
+    }
+
+    /// <summary>
     /// Handle a player's strategy card selection during the draft phase.
     /// Returns true if the selection was accepted.
     /// </summary>
