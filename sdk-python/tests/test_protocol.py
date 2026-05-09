@@ -54,9 +54,11 @@ class FakeWebSocket:
         self.closed = False
 
     async def send(self, data: str) -> None:
+        """simulating send data"""
         self.sent_messages.append(data)
 
     async def close(self) -> None:
+        """simulating close"""
         self.closed = True
 
     def __aiter__(self) -> "FakeWebSocket":
