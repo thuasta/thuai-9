@@ -4,29 +4,37 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
-from typing import Any, TypeAlias
+from typing import Dict, Optional, TypeAlias
 
 from websockets import connect
+from websockets.asyncio.client import ClientConnection
 
+from .message import (
+    JsonObject,
+    parse_error_message,
+    parse_game_state,
+    parse_inbound_message,
+    parse_market_state,
+    parse_news,
+    parse_player_state,
+    parse_report_result,
+    parse_skill_effect,
+    parse_strategy_options,
+    parse_trade_notification,
+)
 from .models import (
-    CardOption,
     GameState,
     MarketState,
     News,
-    OrderInfo,
-    PlayerScore,
     PlayerState,
     Prediction,
-    PriceLevel,
     ReportResult,
     SkillEffect,
     StrategyOptions,
     TradeNotification,
 )
 
-JsonObject: TypeAlias = Mapping[str, Any]
-OutgoingMessage: TypeAlias = dict[str, Any]
+OutgoingMessage: TypeAlias = Dict[str, object]
 
 logger = logging.getLogger("thuai")
 
@@ -37,14 +45,14 @@ class Agent:  # pylint: disable=too-many-instance-attributes
     def __init__(self, token: str, server_url: str = "ws://localhost:14514") -> None:
         self.token = token
         self.server_url = server_url
-        self._ws: Any | None = None
+        self._ws: Optional[ClientConnection] = None
 
         # Current state is refreshed automatically as snapshots arrive.
         self.game_state = GameState()
         self.market_state = MarketState()
         self.player_state = PlayerState()
-        self.latest_news: News | None = None
-        self.strategy_options: StrategyOptions | None = None
+        self.latest_news: Optional[News] = None
+        self.strategy_options: Optional[StrategyOptions] = None
 
     async def connect(self) -> None:
         """Open the websocket connection and register with a sentinel cancel."""
@@ -122,8 +130,8 @@ class Agent:  # pylint: disable=too-many-instance-attributes
     async def activate_skill(
         self,
         skill_name: str,
-        target_token: str | None = None,
-        variant: str | None = None,
+        target_token: Optional[str] = None,
+        variant: Optional[str] = None,
     ) -> None:
         """Activate a skill, optionally targeting a player or variant."""
 
@@ -145,12 +153,13 @@ class Agent:  # pylint: disable=too-many-instance-attributes
 
         await self.connect()
         try:
+            if self._ws is None:
+                raise RuntimeError("Websocket connection is not open")
             async for raw in self._ws:
                 try:
-                    data = json.loads(raw)
-                    msg_type = data.get("messageType", "")
-                    self._update_state(msg_type, data)
-                    await self._dispatch(msg_type, data)
+                    msg_type, payload = parse_inbound_message(json.loads(raw))
+                    self._update_state(msg_type, payload)
+                    await self._dispatch(msg_type, payload)
                 except json.JSONDecodeError:
                     logger.warning("Invalid JSON: %s", raw)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -194,22 +203,22 @@ class Agent:  # pylint: disable=too-many-instance-attributes
     async def _send(self, data: OutgoingMessage) -> None:
         """Serialize and send a client action payload."""
 
-        if self._ws:
+        if self._ws is not None:
             await self._ws.send(json.dumps(data))
 
     def _update_state(self, msg_type: str, data: JsonObject) -> None:
         """Refresh cached state from an inbound snapshot message."""
 
         if msg_type == "GAME_STATE":
-            self.game_state = _parse_game_state(data)
+            self.game_state = parse_game_state(data)
         elif msg_type == "MARKET_STATE":
-            self.market_state = _parse_market_state(data)
+            self.market_state = parse_market_state(data)
         elif msg_type == "PLAYER_STATE":
-            self.player_state = _parse_player_state(data)
+            self.player_state = parse_player_state(data)
         elif msg_type == "NEWS_BROADCAST":
-            self.latest_news = _parse_news(data)
+            self.latest_news = parse_news(data)
         elif msg_type == "STRATEGY_OPTIONS":
-            self.strategy_options = _parse_strategy_options(data)
+            self.strategy_options = parse_strategy_options(data)
 
     async def _dispatch(self, msg_type: str, data: JsonObject) -> None:
         """Invoke the public callback that matches an inbound message type."""
@@ -221,160 +230,17 @@ class Agent:  # pylint: disable=too-many-instance-attributes
         elif msg_type == "PLAYER_STATE":
             await self.on_player_state(self.player_state)
         elif msg_type == "NEWS_BROADCAST":
-            await self.on_news(self.latest_news)
+            if self.latest_news is not None:
+                await self.on_news(self.latest_news)
         elif msg_type == "REPORT_RESULT":
-            await self.on_report_result(_parse_report_result(data))
+            await self.on_report_result(parse_report_result(data))
         elif msg_type == "STRATEGY_OPTIONS":
-            await self.on_strategy_options(self.strategy_options)
+            if self.strategy_options is not None:
+                await self.on_strategy_options(self.strategy_options)
         elif msg_type == "TRADE_NOTIFICATION":
-            await self.on_trade(_parse_trade(data))
+            await self.on_trade(parse_trade_notification(data))
         elif msg_type == "SKILL_EFFECT":
-            await self.on_skill_effect(_parse_skill_effect(data))
+            await self.on_skill_effect(parse_skill_effect(data))
         elif msg_type == "ERROR":
-            await self.on_error(data.get("errorCode", 0), data.get("message", ""))
-
-
-# --- Parsers ---
-
-
-def _parse_game_state(data: JsonObject) -> GameState:
-    """Convert a wire-format game-state payload into a SDK model."""
-
-    scores = [
-        PlayerScore(score["token"], score["score"])
-        for score in data.get("scores", []) or []
-    ]
-    return GameState(
-        stage=data.get("stage", ""),
-        current_month=data.get("currentMonth", 0),
-        current_day=data.get("currentDay", 0),
-        current_tick=data.get("currentTick", 0),
-        total_ticks=data.get("totalTicks", 0),
-        scores=scores,
-    )
-
-
-def _parse_market_state(data: JsonObject) -> MarketState:
-    """Convert a wire-format market-state payload into a SDK model."""
-
-    bids = [
-        PriceLevel(level["price"], level["quantity"])
-        for level in data.get("bids", []) or []
-    ]
-    asks = [
-        PriceLevel(level["price"], level["quantity"])
-        for level in data.get("asks", []) or []
-    ]
-    return MarketState(
-        bids=bids,
-        asks=asks,
-        last_price=data.get("lastPrice", 0),
-        mid_price=data.get("midPrice", 0),
-        volume=data.get("volume", 0),
-        tick=data.get("tick", 0),
-    )
-
-
-def _parse_player_state(data: JsonObject) -> PlayerState:
-    """Convert a wire-format player-state payload into a SDK model."""
-
-    orders = [
-        OrderInfo(
-            order["orderId"],
-            order.get("arrivalTick", 0),
-            order["side"],
-            order["price"],
-            order["quantity"],
-            order["remainingQuantity"],
-            order["status"],
-            order.get("intent", ""),
-        )
-        for order in data.get("pendingOrders", []) or []
-    ]
-    return PlayerState(
-        mora=data.get("mora", 0),
-        frozen_mora=data.get("frozenMora", 0),
-        gold=data.get("gold", 0),
-        frozen_gold=data.get("frozenGold", 0),
-        locked_gold=data.get("lockedGold", 0),
-        nav=data.get("nav", 0),
-        network_delay=data.get("networkDelay", 0),
-        immediate_orders_used_today=data.get("immediateOrdersUsedToday", 0),
-        resting_orders_used_today=data.get("restingOrdersUsedToday", 0),
-        bonus_immediate_orders_today=data.get("bonusImmediateOrdersToday", 0),
-        monthly_trade_count=data.get("monthlyTradeCount", 0),
-        active_cards=data.get("activeCards", []) or [],
-        pending_orders=orders,
-    )
-
-
-def _parse_news(data: JsonObject) -> News:
-    """Convert a wire-format news payload into a SDK model."""
-
-    return News(
-        data.get("month", 0),
-        data.get("day", 0),
-        data.get("newsId", 0),
-        data.get("content", ""),
-        data.get("publishTick", 0),
-    )
-
-
-def _parse_report_result(data: JsonObject) -> ReportResult:
-    """Convert a wire-format report-result payload into a SDK model."""
-
-    return ReportResult(
-        data.get("newsId", 0),
-        data.get("submissionRank", 0),
-        data.get("submitTick", 0),
-        data.get("settlementTick", 0),
-        data.get("prediction", ""),
-        data.get("isCorrect", False),
-        data.get("reward", 0),
-        data.get("actualChange", 0),
-    )
-
-
-def _parse_strategy_options(data: JsonObject) -> StrategyOptions:
-    """Convert a wire-format strategy-options payload into a SDK model."""
-
-    def parse_card(card: JsonObject | None) -> CardOption | None:
-        """Parse a single card entry if it is present."""
-
-        if not card:
-            return None
-        return CardOption(
-            card.get("name", ""),
-            card.get("description", ""),
-            card.get("category", ""),
-        )
-
-    return StrategyOptions(
-        parse_card(data.get("infrastructure")),
-        parse_card(data.get("riskControl")),
-        parse_card(data.get("finTech")),
-    )
-
-
-def _parse_trade(data: JsonObject) -> TradeNotification:
-    """Convert a wire-format trade-notification payload into a SDK model."""
-
-    return TradeNotification(
-        data.get("tradeId", 0),
-        data.get("orderId", 0),
-        data.get("price", 0),
-        data.get("quantity", 0),
-        data.get("side", ""),
-        data.get("fee", 0),
-    )
-
-
-def _parse_skill_effect(data: JsonObject) -> SkillEffect:
-    """Convert a wire-format skill-effect payload into a SDK model."""
-
-    return SkillEffect(
-        data.get("skillName", ""),
-        data.get("sourcePlayer", ""),
-        data.get("targetPlayer"),
-        data.get("description", ""),
-    )
+            code, message = parse_error_message(data)
+            await self.on_error(code, message)

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import List, Optional
 
 
 class GameStage(Enum):
@@ -71,15 +72,15 @@ class GameState:
     current_day: int = 0
     current_tick: int = 0
     total_ticks: int = 0
-    scores: list[PlayerScore] = field(default_factory=list)
+    scores: List[PlayerScore] = field(default_factory=lambda: [])
 
 
 @dataclass
 class MarketState:
     """Public order book and price summary snapshot."""
 
-    bids: list[PriceLevel] = field(default_factory=list)
-    asks: list[PriceLevel] = field(default_factory=list)
+    bids: List[PriceLevel] = field(default_factory=lambda: [])
+    asks: List[PriceLevel] = field(default_factory=lambda: [])
     last_price: int = 0
     mid_price: int = 0
     volume: int = 0
@@ -101,8 +102,8 @@ class PlayerState:  # pylint: disable=too-many-instance-attributes
     resting_orders_used_today: int = 0
     bonus_immediate_orders_today: int = 0
     monthly_trade_count: int = 0
-    active_cards: list[str] = field(default_factory=list)
-    pending_orders: list[OrderInfo] = field(default_factory=list)
+    active_cards: List[str] = field(default_factory=lambda: [])
+    pending_orders: List[OrderInfo] = field(default_factory=lambda: [])
 
 
 @dataclass
@@ -134,9 +135,9 @@ class ReportResult:  # pylint: disable=too-many-instance-attributes
 class StrategyOptions:
     """Available strategy choices grouped by category."""
 
-    infrastructure: CardOption | None = None
-    risk_control: CardOption | None = None
-    fin_tech: CardOption | None = None
+    infrastructure: Optional[CardOption] = None
+    risk_control: Optional[CardOption] = None
+    fin_tech: Optional[CardOption] = None
 
 
 @dataclass
@@ -157,5 +158,5 @@ class SkillEffect:
 
     skill_name: str = ""
     source_player: str = ""
-    target_player: str | None = None
+    target_player: Optional[str] = None
     description: str = ""

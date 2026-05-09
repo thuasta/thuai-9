@@ -1,3 +1,5 @@
+"""Main module for Python SDK"""
+
 import asyncio
 import logging
 import os
@@ -24,7 +26,10 @@ class MyAgent(Agent):
 
     async def on_game_state(self, state: GameState):
         logging.info(
-            f"Game: {state.stage} Day={state.current_day} Tick={state.current_tick}"
+            "Game: %s Day=%s Tick=%s",
+            state.stage,
+            state.current_day,
+            state.current_tick,
         )
 
     async def on_market_state(self, state: MarketState):
@@ -44,7 +49,7 @@ class MyAgent(Agent):
         pass  # Check your portfolio here
 
     async def on_news(self, news: News):
-        logging.info(f"News [{news.news_id}]: {news.content}")
+        logging.info("News [%s]: %s", news.news_id, news.content)
         # Example: submit a research report predicting Long
         await self.submit_report(news.news_id, Prediction.LONG)
 
@@ -59,6 +64,7 @@ class MyAgent(Agent):
 
 
 async def main():
+    """Async main function"""
     token = os.environ.get("TOKEN", "player1")
     server = os.environ.get("SERVER", "ws://localhost:14514")
     agent = MyAgent(token=token, server_url=server)

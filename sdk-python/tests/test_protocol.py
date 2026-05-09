@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from typing import TypeAlias
+from unittest.mock import AsyncMock, patch
 
-from sdk_python.agent import (
-    Agent,
-    _parse_game_state,
-    _parse_news,
-    _parse_player_state,
-    _parse_report_result,
-    _parse_skill_effect,
-    _parse_strategy_options,
+from sdk_python.message import (
+    _optional_object,
+    _optional_str,
+    _require_bool,
+    _require_int,
+    _require_list,
+    _require_object_list,
+    _require_str,
+    _require_str_list,
+    parse_error_message,
+    parse_game_state,
+    parse_inbound_message,
+    parse_market_state,
+    parse_news,
+    parse_player_state,
+    parse_report_result,
+    parse_skill_effect,
+    parse_strategy_options,
+    parse_trade_notification,
 )
 from sdk_python.models import Prediction
+from sdk_python.agent import Agent
 
 ProtocolMessage: TypeAlias = dict[str, object]
 
@@ -30,13 +44,76 @@ class CapturingAgent(Agent):
         self.sent_messages.append(data)
 
 
+class FakeWebSocket:
+    """Simple async websocket double for protocol-flow tests."""
+
+    def __init__(self, messages: list[str]) -> None:
+        self._messages = messages
+        self._index = 0
+        self.sent_messages: list[str] = []
+        self.closed = False
+
+    async def send(self, data: str) -> None:
+        """simulating send data"""
+        self.sent_messages.append(data)
+
+    async def close(self) -> None:
+        """simulating close"""
+        self.closed = True
+
+    def __aiter__(self) -> "FakeWebSocket":
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._messages):
+            raise StopAsyncIteration
+        message = self._messages[self._index]
+        self._index += 1
+        return message
+
+
+class RecordingAgent(Agent):
+    """Agent subclass that records dispatched callbacks."""
+
+    def __init__(self) -> None:
+        super().__init__("player-1")
+        self.events: list[tuple[object, ...]] = []
+
+    async def on_game_state(self, state) -> None:  # type: ignore[override]
+        self.events.append(("game", state.current_month))
+
+    async def on_market_state(self, state) -> None:  # type: ignore[override]
+        self.events.append(("market", state.tick))
+
+    async def on_player_state(self, state) -> None:  # type: ignore[override]
+        self.events.append(("player", state.mora))
+
+    async def on_news(self, news) -> None:  # type: ignore[override]
+        self.events.append(("news", news.news_id))
+
+    async def on_report_result(self, result) -> None:  # type: ignore[override]
+        self.events.append(("report", result.reward))
+
+    async def on_strategy_options(self, options) -> None:  # type: ignore[override]
+        self.events.append(("strategy", options.infrastructure.name))
+
+    async def on_trade(self, trade) -> None:  # type: ignore[override]
+        self.events.append(("trade", trade.trade_id))
+
+    async def on_skill_effect(self, effect) -> None:  # type: ignore[override]
+        self.events.append(("skill", effect.skill_name))
+
+    async def on_error(self, code: int, message: str) -> None:  # type: ignore[override]
+        self.events.append(("error", code, message))
+
+
 class ProtocolParserTests(unittest.TestCase):
     """Parser coverage for the Python SDK wire snapshots."""
 
     def test_parse_game_state_matches_wire_fields(self) -> None:
         """Game-state parsing should preserve the documented wire fields."""
 
-        state = _parse_game_state(
+        state = parse_game_state(
             {
                 "stage": "TradingDay",
                 "currentMonth": 4,
@@ -63,7 +140,7 @@ class ProtocolParserTests(unittest.TestCase):
     def test_parse_player_state_reads_nested_orders(self) -> None:
         """Player-state parsing should preserve nested orders and quotas."""
 
-        state = _parse_player_state(
+        state = parse_player_state(
             {
                 "mora": 1200,
                 "frozenMora": 150,
@@ -111,7 +188,7 @@ class ProtocolParserTests(unittest.TestCase):
     def test_parse_optional_protocol_messages(self) -> None:
         """Optional broadcast payloads should map into the expected SDK models."""
 
-        news = _parse_news(
+        news = parse_news(
             {
                 "month": 5,
                 "day": 1,
@@ -125,7 +202,7 @@ class ProtocolParserTests(unittest.TestCase):
             (news.month, news.day, news.news_id, news.content, news.publish_tick),
         )
 
-        report = _parse_report_result(
+        report = parse_report_result(
             {
                 "newsId": 9,
                 "submissionRank": 2,
@@ -141,10 +218,11 @@ class ProtocolParserTests(unittest.TestCase):
         self.assertTrue(report.is_correct)
         self.assertEqual(240, report.reward)
 
-        effect = _parse_skill_effect(
+        effect = parse_skill_effect(
             {
                 "skillName": "Hedge",
                 "sourcePlayer": "alpha",
+                "targetPlayer": None,
                 "description": "Protected against one loss",
             }
         )
@@ -152,7 +230,7 @@ class ProtocolParserTests(unittest.TestCase):
         self.assertEqual("alpha", effect.source_player)
         self.assertIsNone(effect.target_player)
 
-        options = _parse_strategy_options(
+        options = parse_strategy_options(
             {
                 "infrastructure": {
                     "name": "Bridge",
@@ -170,6 +248,83 @@ class ProtocolParserTests(unittest.TestCase):
         self.assertEqual("Bridge", options.infrastructure.name)
         self.assertIsNone(options.risk_control)
         self.assertEqual("Flash", options.fin_tech.name)
+
+    def test_parse_additional_protocol_messages(self) -> None:
+        """Remaining wire messages should parse into the documented models."""
+
+        market = parse_market_state(
+            {
+                "bids": [{"price": 1001, "quantity": 2}],
+                "asks": [{"price": 1005, "quantity": 4}],
+                "lastPrice": 1003,
+                "midPrice": 1002,
+                "volume": 18,
+                "tick": 77,
+            }
+        )
+        self.assertEqual(1001, market.bids[0].price)
+        self.assertEqual(1005, market.asks[0].price)
+
+        trade = parse_trade_notification(
+            {
+                "tradeId": 11,
+                "orderId": 88,
+                "price": 1030,
+                "quantity": 4,
+                "side": "Sell",
+                "fee": 3,
+            }
+        )
+        self.assertEqual(
+            (11, 88, 1030, 4, "Sell", 3),
+            (
+                trade.trade_id,
+                trade.order_id,
+                trade.price,
+                trade.quantity,
+                trade.side,
+                trade.fee,
+            ),
+        )
+
+        code, message = parse_error_message({"errorCode": 404, "message": "boom"})
+        self.assertEqual((404, "boom"), (code, message))
+
+        msg_type, payload = parse_inbound_message(
+            {
+                "messageType": "TRADE_NOTIFICATION",
+                "tradeId": 11,
+                "orderId": 88,
+                "price": 1030,
+                "quantity": 4,
+                "side": "Sell",
+                "fee": 3,
+            }
+        )
+        self.assertEqual("TRADE_NOTIFICATION", msg_type)
+        self.assertEqual(88, payload["orderId"])
+
+    def test_message_helpers_reject_invalid_types(self) -> None:
+        """Validation helpers should raise on type mismatches."""
+
+        cases = [
+            (_require_int, {"value": True}, "value"),
+            (_require_bool, {"value": 1}, "value"),
+            (_require_str, {"value": 1}, "value"),
+            (_require_list, {"value": 1}, "value"),
+            (_optional_str, {"value": 1}, "value"),
+            (_optional_object, {"value": 1}, "value"),
+            (_require_str_list, {"value": [1]}, "value"),
+            (_require_object_list, {"value": [1]}, "value"),
+        ]
+
+        for helper, payload, key in cases:
+            with self.subTest(helper=helper.__name__):
+                with self.assertRaises(TypeError):
+                    helper(payload, key)
+
+        with self.assertRaises(TypeError):
+            parse_inbound_message([])
 
     def test_update_state_tracks_latest_protocol_snapshots(self) -> None:
         """State caches should update when snapshot messages are received."""
@@ -204,7 +359,9 @@ class ProtocolParserTests(unittest.TestCase):
                     "name": "Tunnel",
                     "description": "Reduces latency",
                     "category": "Infrastructure",
-                }
+                },
+                "riskControl": None,
+                "finTech": None,
             },
         )
 
@@ -212,14 +369,231 @@ class ProtocolParserTests(unittest.TestCase):
         self.assertEqual("Demand fell", agent.latest_news.content)
         self.assertEqual("Tunnel", agent.strategy_options.infrastructure.name)
 
+    def test_parse_inbound_message_reads_envelope(self) -> None:
+        """Inbound messages should expose the type and validated payload."""
+
+        msg_type, payload = parse_inbound_message(
+            {
+                "messageType": "NEWS_BROADCAST",
+                "month": 5,
+                "day": 1,
+                "newsId": 9,
+                "content": "Macro outlook improved",
+                "publishTick": 101,
+            }
+        )
+
+        self.assertEqual("NEWS_BROADCAST", msg_type)
+        self.assertEqual(9, payload["newsId"])
+
 
 class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
     """Outbound action coverage for the Python SDK."""
 
+    async def test_run_dispatches_messages_and_closes_socket(self) -> None:
+        """The event loop should connect, dispatch, and close cleanly."""
+
+        messages = [
+            "not json",
+            json.dumps(
+                {
+                    "messageType": "GAME_STATE",
+                    "stage": "TradingDay",
+                    "currentMonth": 4,
+                    "currentDay": 2,
+                    "currentTick": 73,
+                    "totalTicks": 300,
+                    "scores": [{"token": "alpha", "score": 12}],
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "MARKET_STATE",
+                    "bids": [{"price": 1001, "quantity": 2}],
+                    "asks": [{"price": 1005, "quantity": 4}],
+                    "lastPrice": 1003,
+                    "midPrice": 1002,
+                    "volume": 18,
+                    "tick": 77,
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "PLAYER_STATE",
+                    "mora": 1200,
+                    "frozenMora": 150,
+                    "gold": 7,
+                    "frozenGold": 2,
+                    "lockedGold": 1,
+                    "nav": 1330,
+                    "networkDelay": 45,
+                    "immediateOrdersUsedToday": 3,
+                    "restingOrdersUsedToday": 5,
+                    "bonusImmediateOrdersToday": 1,
+                    "monthlyTradeCount": 14,
+                    "activeCards": ["Bridge", "Firewall"],
+                    "pendingOrders": [],
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "NEWS_BROADCAST",
+                    "month": 5,
+                    "day": 1,
+                    "newsId": 9,
+                    "content": "Macro outlook improved",
+                    "publishTick": 101,
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "REPORT_RESULT",
+                    "newsId": 9,
+                    "submissionRank": 2,
+                    "submitTick": 104,
+                    "settlementTick": 180,
+                    "prediction": "Long",
+                    "isCorrect": True,
+                    "reward": 240,
+                    "actualChange": 60,
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "STRATEGY_OPTIONS",
+                    "infrastructure": {
+                        "name": "Bridge",
+                        "description": "Boosts capacity",
+                        "category": "Infrastructure",
+                    },
+                    "riskControl": None,
+                    "finTech": {
+                        "name": "Flash",
+                        "description": "Extra order quota",
+                        "category": "FinTech",
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "TRADE_NOTIFICATION",
+                    "tradeId": 11,
+                    "orderId": 88,
+                    "price": 1030,
+                    "quantity": 4,
+                    "side": "Sell",
+                    "fee": 3,
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "SKILL_EFFECT",
+                    "skillName": "Hedge",
+                    "sourcePlayer": "alpha",
+                    "targetPlayer": "beta",
+                    "description": "Protected against one loss",
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "ERROR",
+                    "errorCode": 404,
+                    "message": "boom",
+                }
+            ),
+            json.dumps(
+                {
+                    "messageType": "ERROR",
+                    "errorCode": "bad",
+                    "message": "boom",
+                }
+            ),
+        ]
+        fake_ws = FakeWebSocket(messages)
+        agent = RecordingAgent()
+
+        with patch("sdk_python.agent.connect", new=AsyncMock(return_value=fake_ws)):
+            await agent.run()
+
+        self.assertTrue(fake_ws.closed)
+        self.assertEqual(
+            [
+                {
+                    "messageType": "CANCEL_ORDER",
+                    "token": "player-1",
+                    "orderId": -1,
+                }
+            ],
+            [json.loads(payload) for payload in fake_ws.sent_messages],
+        )
+        self.assertEqual(
+            [
+                ("game", 4),
+                ("market", 77),
+                ("player", 1200),
+                ("news", 9),
+                ("report", 240),
+                ("strategy", "Bridge"),
+                ("trade", 11),
+                ("skill", "Hedge"),
+                ("error", 404, "boom"),
+            ],
+            agent.events,
+        )
+
+    async def test_run_handles_connect_failure(self) -> None:
+        """Connection errors should be swallowed and still trigger cleanup."""
+
+        agent = RecordingAgent()
+
+        async def fake_connect(self) -> None:
+            self._ws = None
+
+        with patch.object(Agent, "connect", fake_connect):
+            await agent.run()
+
+        self.assertEqual([], agent.events)
+
+    async def test_action_methods_write_expected_payloads(self) -> None:
+        """Remaining action methods should serialize their payloads."""
+
+        agent = Agent("player-1")
+        fake_ws = FakeWebSocket([])
+        agent._ws = fake_ws  # pylint: disable=protected-access
+
+        await agent.limit_sell(1040, 2)
+        await agent.cancel_order(7)
+        await agent.select_strategy("Bridge")
+
+        self.assertEqual(
+            [
+                {
+                    "messageType": "LIMIT_SELL",
+                    "token": "player-1",
+                    "price": 1040,
+                    "quantity": 2,
+                },
+                {
+                    "messageType": "CANCEL_ORDER",
+                    "token": "player-1",
+                    "orderId": 7,
+                },
+                {
+                    "messageType": "SELECT_STRATEGY",
+                    "token": "player-1",
+                    "cardName": "Bridge",
+                },
+            ],
+            [json.loads(payload) for payload in fake_ws.sent_messages],
+        )
+
+    def _make_agent(self):
+        return CapturingAgent()
+
     async def test_limit_buy_sends_documented_payload(self) -> None:
         """Limit buys should serialize to the documented wire payload."""
 
-        agent = CapturingAgent()
+        agent = self._make_agent()
 
         await agent.limit_buy(1050, 3)
 
@@ -238,7 +612,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
     async def test_submit_report_serializes_prediction_value(self) -> None:
         """Report submissions should serialize the enum's wire value."""
 
-        agent = CapturingAgent()
+        agent = self._make_agent()
 
         await agent.submit_report(7, Prediction.SHORT)
 
@@ -257,7 +631,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
     async def test_activate_skill_omits_empty_optional_fields(self) -> None:
         """Skill payloads should omit unset optional fields."""
 
-        agent = CapturingAgent()
+        agent = self._make_agent()
 
         await agent.activate_skill("MarketRadar")
 
@@ -275,7 +649,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
     async def test_activate_skill_includes_target_and_variant(self) -> None:
         """Skill payloads should include populated optional fields."""
 
-        agent = CapturingAgent()
+        agent = self._make_agent()
 
         await agent.activate_skill(
             "Freeze",
