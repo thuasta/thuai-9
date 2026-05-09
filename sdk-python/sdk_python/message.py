@@ -55,7 +55,7 @@ def _require_list(data: JsonObject, key: str) -> List[object]:
     value = data[key]
     if not isinstance(value, list):
         raise TypeError(f"Field '{key}' must be list, got {type(value).__name__}")
-    return value # type: ignore
+    return value  # type: ignore
 
 
 def _optional_str(data: JsonObject, key: str) -> Optional[str]:
@@ -65,7 +65,9 @@ def _optional_str(data: JsonObject, key: str) -> Optional[str]:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise TypeError(f"Field '{key}' must be str or null, got {type(value).__name__}")
+        raise TypeError(
+            f"Field '{key}' must be str or null, got {type(value).__name__}"
+        )
     return value
 
 
@@ -76,7 +78,9 @@ def _optional_object(data: JsonObject, key: str) -> Optional[JsonObject]:
     if value is None:
         return None
     if not isinstance(value, dict):
-        raise TypeError(f"Field '{key}' must be object or null, got {type(value).__name__}")
+        raise TypeError(
+            f"Field '{key}' must be object or null, got {type(value).__name__}"
+        )
     return cast(JsonObject, value)
 
 

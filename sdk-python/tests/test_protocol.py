@@ -275,14 +275,17 @@ class ProtocolParserTests(unittest.TestCase):
                 "fee": 3,
             }
         )
-        self.assertEqual((11, 88, 1030, 4, "Sell", 3), (
-            trade.trade_id,
-            trade.order_id,
-            trade.price,
-            trade.quantity,
-            trade.side,
-            trade.fee,
-        ))
+        self.assertEqual(
+            (11, 88, 1030, 4, "Sell", 3),
+            (
+                trade.trade_id,
+                trade.order_id,
+                trade.price,
+                trade.quantity,
+                trade.side,
+                trade.fee,
+            ),
+        )
 
         code, message = parse_error_message({"errorCode": 404, "message": "boom"})
         self.assertEqual((404, "boom"), (code, message))
