@@ -100,7 +100,7 @@ public partial class Game
 
     private void TransitionToStrategySelection()
     {
-        if (CurrentMonthNumber >= _settings.TradingDayCount)
+        if (!_settings.InfiniteMode && CurrentMonthNumber >= _settings.TradingDayCount)
         {
             Stage = GameStage.Finished;
             return;
@@ -188,7 +188,7 @@ public partial class Game
         }
 
         _settlementProcessed = false;
-        if (CurrentMonthNumber >= _settings.TradingDayCount)
+        if (!_settings.InfiniteMode && CurrentMonthNumber >= _settings.TradingDayCount)
         {
             Stage = GameStage.Finished;
         }
@@ -281,7 +281,7 @@ public partial class Game
             Scoreboard[winnerToken] = Scoreboard.GetValueOrDefault(winnerToken, 0) + 1;
         }
 
-        if (CurrentMonthNumber >= _settings.TradingDayCount)
+        if (!_settings.InfiniteMode && CurrentMonthNumber == _settings.TradingDayCount)
         {
             var cumulativeOrdered = CumulativeNavs
                 .OrderByDescending(entry => entry.Value)

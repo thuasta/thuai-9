@@ -64,6 +64,9 @@ public record GameSettings
     [JsonPropertyName("tradingDayCount")]
     public int TradingDayCount { get; init; } = 3;
 
+    [JsonPropertyName("infiniteMode")]
+    public bool InfiniteMode { get; init; } = false;
+
     [JsonPropertyName("strategySelectionTicks")]
     public int StrategySelectionTicks { get; init; } = 40;
 

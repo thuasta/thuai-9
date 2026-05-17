@@ -2,10 +2,10 @@ namespace Thuai;
 
 using Serilog;
 using Serilog.Events;
-using Thuai.Utility;
-using Thuai.Connection;
-using Thuai.GameLogic;
-using Thuai.Protocol.Messages;
+using Utility;
+using Connection;
+using GameLogic;
+using Protocol.Messages;
 
 public class Program
 {
@@ -22,9 +22,17 @@ public class Program
             return;
         }
 
+        bool infiniteMode = args.Any(arg => string.Equals(arg, "--infinite", StringComparison.OrdinalIgnoreCase));
+        if (infiniteMode)
+        {
+            config = config with { Game = config.Game with { InfiniteMode = true } };
+        }
+
         // Setup logging
         SetupLogger(config.Log);
         Log.Information("THUAI-9 Server starting...");
+        if (infiniteMode)
+            Log.Information("Infinite mode enabled: month numbers will continue past month 3");
 
         try
         {
@@ -172,13 +180,13 @@ public class Program
         };
         agentServer.PublishToAll(gameState);
 
-        if (game.CurrentTradingDay != null && game.CurrentTradingDay.HasPendingNotifications)
+        if (game.CurrentTradingDay is { HasPendingNotifications: true })
         {
             PublishTradingDayNotifications(agentServer, game);
             game.CurrentTradingDay.MarkNotificationsPublished();
         }
 
-        if (game.HasPendingSettlementNotification && game.CurrentTradingDay != null)
+        if (game is { HasPendingSettlementNotification: true, CurrentTradingDay: not null })
         {
             agentServer.PublishToAll(BuildDaySettlementMessage(game));
             game.MarkSettlementNotificationPublished();
@@ -433,7 +441,7 @@ public class Program
             TradingDayTick = game.CurrentTradingDay?.CurrentTick,
             MarketState = game.CurrentTradingDay != null ? new
             {
-                LastPrice = game.CurrentTradingDay.OrderBook.LastPrice,
+                game.CurrentTradingDay.OrderBook.LastPrice,
                 MidPrice = game.CurrentTradingDay.OrderBook.MidPrice,
                 Volume = game.CurrentTradingDay.OrderBook.TotalVolume
             } : null,

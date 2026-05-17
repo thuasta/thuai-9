@@ -102,8 +102,7 @@ public partial class AgentServer
                 return;
             }
 
-            _socketTokens[socketId] = message.Token;
-            _socketRoles[socketId] = SocketRole.Player;
+            BindPlayerSocket(socketId, message.Token);
             AfterPlayerConnectEvent?.Invoke(this, new AfterPlayerConnectEventArgs
             {
                 SocketId = socketId,
@@ -170,8 +169,7 @@ public partial class AgentServer
                         hello.Token, socketId);
                     return;
                 }
-                _socketTokens[socketId] = hello.Token;
-                _socketRoles[socketId] = SocketRole.Player;
+                BindPlayerSocket(socketId, hello.Token);
                 AfterPlayerConnectEvent?.Invoke(this, new AfterPlayerConnectEventArgs
                 {
                     SocketId = socketId,
