@@ -27,8 +27,8 @@ public record GameStateMessage : Message
 
 public record PlayerScore
 {
-    [JsonPropertyName("token")]
-    public string Token { get; init; } = "";
+    [JsonPropertyName("playerId")]
+    public int PlayerId { get; init; }
 
     [JsonPropertyName("score")]
     public int Score { get; init; }

@@ -37,6 +37,9 @@ public partial class AgentServer
 
         if (_socketTokens.TryRemove(socketId, out var token))
         {
+            if (_tokenSockets.TryGetValue(token, out var boundSocketId) && boundSocketId == socketId)
+                _tokenSockets.TryRemove(token, out _);
+
             AfterPlayerDisconnectEvent?.Invoke(this, new AfterPlayerDisconnectEventArgs
             {
                 SocketId = socketId,

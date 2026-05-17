@@ -21,6 +21,7 @@ public partial class AgentServer
     private WebSocketServer? _wsServer;
     private readonly ConcurrentDictionary<Guid, IWebSocketConnection> _sockets = new();
     private readonly ConcurrentDictionary<Guid, string> _socketTokens = new();
+    private readonly ConcurrentDictionary<string, Guid> _tokenSockets = new();
     private readonly ConcurrentDictionary<Guid, SocketRole> _socketRoles = new();
     private readonly ConcurrentDictionary<string, byte> _validTokens = new();
 
