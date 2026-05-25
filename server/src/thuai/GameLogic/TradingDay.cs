@@ -50,7 +50,8 @@ public class TradingDay
         int researchSettlementDelay,
         long baseResearchReward,
         int npcOrdersPerTick,
-        int monthNumber = 1)
+        int monthNumber = 1,
+        INewsGenerator? newsGenerator = null)
     {
         MonthNumber = monthNumber;
         _maxTicks = maxTicks;
@@ -58,7 +59,7 @@ public class TradingDay
         _players = players;
         _orderBook = new OrderBook(initialGoldPrice);
         _matchEngine = new MatchEngine(_orderBook, players);
-        _newsSystem = new NewsSystem(newsIntervalMin, newsIntervalMax, researchWindow);
+        _newsSystem = new NewsSystem(newsIntervalMin, newsIntervalMax, researchWindow, newsGenerator);
         _npcTrader = new NPCTrader(npcOrdersPerTick);
         _researchSystem = new ResearchSystem(_newsSystem, baseResearchReward, researchWindow, researchSettlementDelay);
     }
@@ -141,6 +142,17 @@ public class TradingDay
         _hasPendingNotifications = false;
     }
 
+    public News InjectFakeNews(int currentTick, string sourcePlayer, NewsSentiment sentiment, string? content = null)
+    {
+        lock (_lock)
+        {
+            var news = _newsSystem.InjectFakeNews(currentTick, sourcePlayer, sentiment, content);
+            _publishedNewsThisDay.Add(news);
+            _hasPendingNotifications = true;
+            return news;
+        }
+    }
+
     public bool HandleLimitBuy(string playerToken, long price, int quantity)
     {
         lock (_lock)
@@ -183,14 +195,18 @@ public class TradingDay
         }
     }
 
-    public bool HandleActivateSkill(string playerToken, string skillName, int? targetPlayerId = null, string? variant = null)
+    public bool HandleActivateSkill(
+        string playerToken,
+        string skillName,
+        int? targetPlayerId = null,
+        string? targetToken = null,
+        string? variant = null)
     {
         lock (_lock)
         {
             if (_isFinished) return false;
             if (!_players.TryGetValue(playerToken, out var player)) return false;
 
-            string? targetToken = null;
             if (targetPlayerId.HasValue)
             {
                 var targetPlayer = _players.Values.FirstOrDefault(p => p.PlayerId == targetPlayerId.Value);
@@ -207,7 +223,7 @@ public class TradingDay
                 FlashTrading flash => ActivateFlashTrading(player, flash),
                 StopLossBlade blade => ActivateStopLossBlade(player, blade),
                 TargetedPurchase targeted => ActivateTargetedPurchase(player, targeted),
-                NetworkStorm storm => ActivateNetworkStorm(player, storm, targetToken),
+                NetworkStorm storm => ActivateNetworkStorm(player, storm, targetPlayerId, targetToken),
                 PublicOpinionAttack attack => ActivatePublicOpinionAttack(player, attack),
                 _ => false
             };
@@ -412,11 +428,13 @@ public class TradingDay
         return true;
     }
 
-    private bool ActivateNetworkStorm(Player player, NetworkStorm storm, string? targetToken)
+    private bool ActivateNetworkStorm(Player player, NetworkStorm storm, int? targetPlayerId, string? targetToken)
     {
-        if (!storm.CanUse || string.IsNullOrWhiteSpace(targetToken))
+        if (!storm.CanUse)
             return false;
-        if (!_players.TryGetValue(targetToken, out var targetPlayer))
+
+        var targetPlayer = ResolveTargetPlayer(targetPlayerId, targetToken);
+        if (targetPlayer == null)
             return false;
         if (player.Mora < storm.ActivationCost)
             return false;
@@ -426,6 +444,16 @@ public class TradingDay
         storm.MarkUsed();
         _skillEffectsThisDay.Add(new SkillActivation(player.PlayerId, storm.Name, "next order delayed by 1 day", targetPlayer.PlayerId));
         return true;
+    }
+
+    private Player? ResolveTargetPlayer(int? targetPlayerId, string? targetToken)
+    {
+        if (targetPlayerId.HasValue)
+            return _players.Values.FirstOrDefault(target => target.PlayerId == targetPlayerId.Value);
+
+        return !string.IsNullOrWhiteSpace(targetToken) && _players.TryGetValue(targetToken, out var targetPlayer)
+            ? targetPlayer
+            : null;
     }
 
     private bool ActivatePublicOpinionAttack(Player player, PublicOpinionAttack attack)
@@ -439,8 +467,7 @@ public class TradingDay
         var sentiment = Random.Shared.Next(2) == 0
             ? NewsSentiment.Bullish
             : NewsSentiment.Bearish;
-        var fakeNews = _newsSystem.InjectFakeNews(_currentTick, player.Token, sentiment);
-        _publishedNewsThisDay.Add(fakeNews);
+        InjectFakeNews(_currentTick, player.Token, sentiment);
 
         foreach (var other in _players.Values.Where(other => other.Token != player.Token))
         {

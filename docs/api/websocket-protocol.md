@@ -158,8 +158,9 @@
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `skillName` | string | 是 | 技能名 |
-| `targetPlayerId` | int | 否 | 当前用于 `网络风暴` 指定目标 |
+| `targetPlayerId` | int | 否 | 当前用于 `网络风暴` 指定目标 PlayerID |
 | `variant` | string | 否 | 当前用于 `内幕消息`，支持 `"cheap"` |
+| `targetToken` | string | 否 | 旧字段，仅兼容旧客户端，不建议新 Agent 使用 |
 
 已实现的主动技能参数约定：
 
@@ -290,6 +291,7 @@
 
 - `pendingOrders` 同时包含“尚未到达的延迟订单”和“已进入订单簿但未完全成交的订单”。
 - 订单尚未到达时，`intent` 可能为空；到达并处理后会变成 `Immediate` 或 `Resting`。
+- `playerId` 是当前 Agent 自己的公开玩家编号，可与 `GAME_STATE.scores[].playerId` 对照。
 - `monthlyTradeCount` 用于当月结算平局时的交易数比较。
 
 ### STRATEGY_OPTIONS

@@ -681,6 +681,21 @@ public class PlayerTests
 
 public class NewsSystemTests
 {
+    private sealed class StubNewsGenerator : INewsGenerator
+    {
+        public int Calls { get; private set; }
+
+        public string GenerateContent(NewsGenerationRequest request)
+        {
+            Calls++;
+            return $"generated-{request.Sentiment}-{Calls}";
+        }
+
+        public void StartWarmup()
+        {
+        }
+    }
+
     [Fact]
     public void Tick_BeforeInterval_ReturnsNull()
     {
@@ -741,6 +756,59 @@ public class NewsSystemTests
     }
 
     [Fact]
+    public void TemplateNews_AvoidsObviousDirectionTerms()
+    {
+        string[] prohibitedTerms =
+        [
+            "利好",
+            "利空",
+            "看涨",
+            "看跌",
+            "上涨",
+            "下跌",
+            "飙升",
+            "暴跌",
+            "拉升",
+            "跳水",
+            "走强",
+            "走弱",
+            "承压",
+            "金价",
+            "价格",
+            "短线",
+            "买入",
+            "卖出",
+            "产量",
+            "库存",
+            "供应",
+            "源源不断",
+            "货架空空",
+            "达标"
+        ];
+
+        for (var i = 0; i < 100; i++)
+        {
+            var content = TemplateNewsGenerator.PickTemplate(
+                i % 2 == 0 ? NewsSentiment.Bullish : NewsSentiment.Bearish);
+
+            Assert.DoesNotContain(prohibitedTerms, term => content.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public void GeneratedNews_UsesInjectedGenerator()
+    {
+        var generator = new StubNewsGenerator();
+        var newsSystem = new NewsSystem(intervalMin: 1, intervalMax: 1, researchWindow: 50, generator);
+
+        var publishedNews = newsSystem.Tick(1);
+
+        Assert.NotNull(publishedNews);
+        Assert.StartsWith($"generated-{publishedNews!.Sentiment}-", publishedNews.Content);
+        Assert.Equal(1, generator.Calls);
+    }
+
+    [Fact]
     public void InjectFakeNews_MarkedAsFake()
     {
         var newsSystem = new NewsSystem(intervalMin: 200, intervalMax: 400, researchWindow: 50);
@@ -757,6 +825,22 @@ public class NewsSystemTests
         // Should appear in AllNews and as LatestNews
         Assert.Contains(fakeNews, newsSystem.AllNews);
         Assert.Same(fakeNews, newsSystem.LatestNews);
+    }
+
+    [Fact]
+    public void InjectFakeNews_UsesProvidedContent()
+    {
+        var generator = new StubNewsGenerator();
+        var newsSystem = new NewsSystem(intervalMin: 200, intervalMax: 400, researchWindow: 50, generator);
+
+        var fakeNews = newsSystem.InjectFakeNews(
+            currentTick: 10,
+            sourcePlayer: "admin",
+            sentiment: NewsSentiment.Bullish,
+            content: "后台指定新闻内容");
+
+        Assert.Equal("后台指定新闻内容", fakeNews.Content);
+        Assert.Equal(0, generator.Calls);
     }
 
     [Fact]

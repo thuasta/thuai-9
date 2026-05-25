@@ -241,10 +241,12 @@ export function applyMessage(state, message) {
       break;
 
     case "SKILL_EFFECT":
+      const sourcePlayer = playerDisplayName(state, message.sourcePlayerId);
+      const targetPlayer = message.targetPlayerId !== undefined ? ` -> ${playerDisplayName(state, message.targetPlayerId)}` : "";
       pushEvent(state, {
         kind: "skill",
         title: message.skillName || "技能触发",
-        detail: `${playerDisplayName(state, message.sourcePlayerId)} ${message.description || ""}`.trim(),
+        detail: `${sourcePlayer}${targetPlayer} ${message.description || ""}`.trim(),
       });
       break;
 

@@ -684,7 +684,7 @@ public class TradingDayCoverageTests
         Assert.Equal(892_000, players["alpha"].Mora);
         Assert.Equal(100, players["alpha"].LockedGold);
 
-        Assert.True(day.HandleActivateSkill("alpha", "网络风暴", targetPlayerId: 1));
+        Assert.True(day.HandleActivateSkill("alpha", "网络风暴", targetPlayerId: players["beta"].PlayerId));
         Assert.True(day.HandleLimitBuy("beta", 100, 1));
         Assert.Equal(2, day.MatchEngine.GetPendingOrders("beta").Single().ArrivalTick);
 

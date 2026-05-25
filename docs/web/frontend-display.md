@@ -234,17 +234,17 @@ type Candle = {
 - `PLAYER_STATE` 是私有状态，只发给对应玩家。
 - `PLAYER_SUMMARY_STATE` 是 observer 摘要，不包含完整挂单列表。
 - `MARKET_STATE` 在 player 视角可能包含技能造成的伪盘口；observer 应接收公共真实盘口。
-- `REPORT_RESULT` 在 player 侧可不带 `playerToken`，observer 侧建议补充 `playerToken`。
+- `REPORT_RESULT` 在 player 侧可不带 `playerId`，observer 侧建议补充 `playerId`。
 
 ## 结算展示
 
 `DAY_SETTLEMENT` 建议字段：
 
 - `day`。
-- `winnerToken`。
+- `winnerPlayerId`。
 - `reason`：`NAV`、`TradeCount` 或 `Tie`。
 - `scores`。
-- `players[].token`。
+- `players[].playerId`。
 - `players[].nav`。
 - `players[].tradeCount`。
 - `players[].mora`、`players[].gold` 可选。

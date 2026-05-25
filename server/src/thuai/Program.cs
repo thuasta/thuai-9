@@ -49,7 +49,8 @@ public class Program
                 Log.Information("Admin debug interface enabled (THUAI_ADMIN_SECRET set)");
             if (agentServer.AcceptAnyToken)
                 Log.Warning("Open token mode enabled: any non-empty player token will be accepted");
-            var gameController = new GameController.GameController(config.Game);
+            var newsGenerator = NewsGeneratorFactory.Create(config.NewsGeneration);
+            var gameController = new GameController.GameController(config.Game, newsGenerator);
             using var recorder = new Recorder.Recorder("./data", config.Recorder.KeepRecord, config.Recorder.FlushEveryRecords);
             using var statRecorder = new Recorder.StatRecorder("./data", config.Recorder.EnableStatRecording, config.Recorder.StatFlushEveryRecords);
             var disconnectedPlayerRetentionTicks = config.Game.DisconnectedPlayerRetentionTicks;

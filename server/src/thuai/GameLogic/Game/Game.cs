@@ -16,6 +16,7 @@ public partial class Game
 {
     private readonly object _lock = new();
     private readonly GameSettings _settings;
+    private readonly INewsGenerator _newsGenerator;
 
     public GameStage Stage { get; private set; } = GameStage.Waiting;
     public int CurrentTick { get; private set; }
@@ -32,9 +33,10 @@ public partial class Game
     private bool _settlementProcessed;
     private readonly Dictionary<string, bool> _playerStrategySelected = new();
 
-    public Game(GameSettings settings)
+    public Game(GameSettings settings, INewsGenerator? newsGenerator = null)
     {
         _settings = settings;
+        _newsGenerator = newsGenerator ?? new TemplateNewsGenerator();
         _waitingTicksRemaining = settings.PlayerWaitingTicks;
     }
 
@@ -154,7 +156,8 @@ public partial class Game
             _settings.ResearchSettlementDelay,
             _settings.BaseResearchReward,
             _settings.NpcOrdersPerTick,
-            CurrentMonthNumber
+            CurrentMonthNumber,
+            _newsGenerator
         );
         CurrentTradingDay.Initialize();
 

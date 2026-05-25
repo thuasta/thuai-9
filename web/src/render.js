@@ -426,6 +426,7 @@ function renderPortfolio(state) {
   if (!node) return;
   const player = state.player;
   node.innerHTML = [
+    statCell("Player ID", player.playerId),
     statCell("NAV", player.nav),
     statCell("Mora", player.mora),
     statCell("Frozen Mora", player.frozenMora),

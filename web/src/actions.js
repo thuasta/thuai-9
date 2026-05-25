@@ -93,7 +93,7 @@ export function selectStrategyMessage(token, cardName) {
   };
 }
 
-export function activateSkillMessage(token, skillName, targetPlayerId) {
+export function activateSkillMessage(token, skillName, targetPlayerId, variant) {
   const message = {
     messageType: "ACTIVATE_SKILL",
     token,
@@ -102,6 +102,9 @@ export function activateSkillMessage(token, skillName, targetPlayerId) {
   const id = toPlayerId(targetPlayerId);
   if (id !== undefined) {
     message.targetPlayerId = id;
+  }
+  if (variant) {
+    message.variant = variant;
   }
   return message;
 }

@@ -51,6 +51,7 @@ public class ProtocolMessageTests
         Assert.Equal("ACTIVATE_SKILL", json.GetProperty("messageType").GetString());
         Assert.Equal("MarketRadar", json.GetProperty("skillName").GetString());
         Assert.False(json.TryGetProperty("targetPlayerId", out _));
+        Assert.False(json.TryGetProperty("targetToken", out _));
         Assert.False(json.TryGetProperty("variant", out _));
     }
 

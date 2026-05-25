@@ -138,6 +138,8 @@ class Agent:  # pylint: disable=too-many-instance-attributes
         skill_name: str,
         target_player_id: Optional[int] = None,
         variant: Optional[str] = None,
+        *,
+        target_token: Optional[str] = None,
     ) -> None:
         """Activate a skill, optionally targeting a player by ID or variant."""
 
@@ -148,6 +150,8 @@ class Agent:  # pylint: disable=too-many-instance-attributes
         }
         if target_player_id is not None:
             msg["targetPlayerId"] = target_player_id
+        if target_token:
+            msg["targetToken"] = target_token
         if variant:
             msg["variant"] = variant
         await self._send(msg)

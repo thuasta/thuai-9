@@ -8,6 +8,7 @@ from typing import TypeAlias
 from unittest.mock import AsyncMock, patch
 
 from sdk_python.message import (
+    _optional_int,
     _optional_object,
     _optional_str,
     _require_bool,
@@ -314,6 +315,7 @@ class ProtocolParserTests(unittest.TestCase):
             (_require_bool, {"value": 1}, "value"),
             (_require_str, {"value": 1}, "value"),
             (_require_list, {"value": 1}, "value"),
+            (_optional_int, {"value": True}, "value"),
             (_optional_str, {"value": 1}, "value"),
             (_optional_object, {"value": 1}, "value"),
             (_require_str_list, {"value": [1]}, "value"),

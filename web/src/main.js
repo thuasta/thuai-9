@@ -396,6 +396,7 @@ function handleSkill(event) {
     state.connection.token,
     String(data.get("skillName") || "").trim(),
     data.get("targetPlayerId"),
+    String(data.get("variant") || "").trim(),
   ));
 }
 
@@ -565,6 +566,7 @@ function actionDetail(message) {
     if (message.targetPlayerId !== undefined && message.targetPlayerId !== null && message.targetPlayerId !== "") {
       parts.push(`target=选手 ${message.targetPlayerId}`);
     }
+    if (message.variant) parts.push(`variant=${message.variant}`);
     return parts.filter(Boolean).join(" ");
   }
   return message.messageType;

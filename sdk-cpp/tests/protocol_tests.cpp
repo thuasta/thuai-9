@@ -169,11 +169,13 @@ TEST_CASE("strategy and skill parsers handle optional fields") {
   thuai::SkillEffect effect = parseSkillEffect(json{
       {"skillName", "Hedge"},
       {"sourcePlayerId", 0},
+      {"targetPlayerId", 1},
       {"description", "Protected against one loss"},
   });
   CHECK(effect.skillName == "Hedge");
   CHECK(effect.sourcePlayerId == 0);
-  CHECK_FALSE(effect.targetPlayerId.has_value());
+  REQUIRE(effect.targetPlayerId.has_value());
+  CHECK(*effect.targetPlayerId == 1);
   CHECK(effect.description == "Protected against one loss");
 }
 

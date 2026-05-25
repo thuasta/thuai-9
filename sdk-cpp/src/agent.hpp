@@ -61,14 +61,17 @@ class Agent {
     send(protocol::buildSelectStrategyMessage(token_, cardName));
   }
 
-  void activateSkill(const std::string& skillName, int targetPlayerId = -1,
+  void activateSkill(const std::string& skillName,
+                     const std::optional<int>& targetPlayerId = std::nullopt,
                      const std::string& variant = "") {
-    spdlog::debug(
-        "Queueing skill activation name={} targetPlayerId={} variant={}",
-        skillName, targetPlayerId, variant.empty() ? "none" : variant);
+    const std::string targetDescription = targetPlayerId.has_value()
+                                              ? std::to_string(*targetPlayerId)
+                                              : "none";
+    spdlog::debug("Queueing skill activation name={} target={} variant={}",
+                  skillName, targetDescription,
+                  variant.empty() ? "none" : variant);
     send(protocol::buildActivateSkillMessage(
-        token_, skillName,
-        targetPlayerId >= 0 ? std::make_optional(targetPlayerId) : std::nullopt,
+        token_, skillName, targetPlayerId,
         variant.empty() ? std::nullopt : std::make_optional(variant)));
   }
 
@@ -187,10 +190,10 @@ class Agent {
       } else if (msgType == "PLAYER_STATE") {
         playerState = protocol::parsePlayerState(data);
         spdlog::debug(
-            "Parsed player state mora={} frozenMora={} gold={} frozenGold={} "
+            "Parsed player state playerId={} mora={} frozenMora={} gold={} frozenGold={} "
             "lockedGold={} nav={} pendingOrders={} activeCards={}",
-            playerState.mora, playerState.frozenMora, playerState.gold,
-            playerState.frozenGold, playerState.lockedGold, playerState.nav,
+            playerState.playerId, playerState.mora, playerState.frozenMora,
+            playerState.gold, playerState.frozenGold, playerState.lockedGold, playerState.nav,
             playerState.pendingOrders.size(), playerState.activeCards.size());
         onPlayerState(playerState);
       } else if (msgType == "NEWS_BROADCAST") {

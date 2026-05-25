@@ -14,8 +14,8 @@ export function buildSampleMessages(role = "observer") {
       currentTick: 260,
       totalTicks: 1,
       scores: [
-        { token: "player1", score: 0 },
-        { token: "player2", score: 0 },
+        { playerId: 0, score: 0 },
+        { playerId: 1, score: 0 },
       ],
     },
     {
@@ -53,8 +53,8 @@ export function buildSampleMessages(role = "observer") {
       currentTick: 260 + tick,
       totalTicks: tick,
       scores: [
-        { token: "player1", score: 0 },
-        { token: "player2", score: 0 },
+        { playerId: 0, score: 0 },
+        { playerId: 1, score: 0 },
       ],
     });
 
@@ -76,6 +76,7 @@ export function buildSampleMessages(role = "observer") {
     if (tick === 18) {
       messages.push({
         messageType: "PLAYER_STATE",
+        playerId: 0,
         mora: 982400,
         frozenMora: 18000,
         gold: 1004,
@@ -133,7 +134,7 @@ export function buildSampleMessages(role = "observer") {
       messages.push({
         messageType: "SKILL_EFFECT",
         skillName: "拔网线",
-        sourcePlayer: "player2",
+        sourcePlayerId: 1,
         description: "交易所进入熔断状态 20 Tick。",
       });
     }
@@ -164,15 +165,15 @@ export function buildSampleMessages(role = "observer") {
   messages.push({
     messageType: "DAY_SETTLEMENT",
     day: 1,
-    winnerToken: "player1",
+    winnerPlayerId: 0,
     reason: "NAV",
     scores: [
-      { token: "player1", score: 1 },
-      { token: "player2", score: 0 },
+      { playerId: 0, score: 1 },
+      { playerId: 1, score: 0 },
     ],
     players: [
-      { token: "player1", nav: 2034500, tradeCount: 17 },
-      { token: "player2", nav: 1992000, tradeCount: 13 },
+      { playerId: 0, nav: 2034500, tradeCount: 17 },
+      { playerId: 1, nav: 1992000, tradeCount: 13 },
     ],
   });
 
@@ -191,16 +192,17 @@ function makeLevels(basePrice, step, count) {
 }
 
 function summary(token, mora, gold, midPrice, pendingOrderCount) {
+  const playerId = token === "player2" ? 1 : 0;
   return {
     messageType: "PLAYER_SUMMARY_STATE",
-    token,
+    playerId,
     mora,
     frozenMora: pendingOrderCount * 9000,
     gold,
     frozenGold: pendingOrderCount * 3,
-    lockedGold: token === "player2" ? 100 : 0,
+    lockedGold: playerId === 1 ? 100 : 0,
     nav: mora + gold * midPrice,
-    activeCards: token === "player1" ? ["内幕消息", "暗池交易"] : ["冰山订单", "拔网线"],
+    activeCards: playerId === 0 ? ["内幕消息", "暗池交易"] : ["冰山订单", "拔网线"],
     pendingOrderCount,
     tradeCount: 8 + pendingOrderCount,
   };

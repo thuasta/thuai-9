@@ -82,10 +82,14 @@ public class AdminCommandHandlerCoverageTests
 
         var injectNews = Assert.IsType<DebugAckMessage>(AdminCommandHandler.Handle(
             tradingGame,
-            new DebugInjectNewsMessage { Sentiment = "Bullish" }));
+            new DebugInjectNewsMessage { Sentiment = "Bullish", Content = "调试新闻推动金价走高" }));
         Assert.True(injectNews.Ok);
         Assert.NotNull(tradingGame.CurrentTradingDay!.NewsSystem.LatestNews);
         Assert.True(tradingGame.CurrentTradingDay.NewsSystem.LatestNews!.IsFake);
+        Assert.Equal("调试新闻推动金价走高", tradingGame.CurrentTradingDay.NewsSystem.LatestNews.Content);
+        Assert.True(tradingGame.CurrentTradingDay.HasPendingNotifications);
+        Assert.Contains(tradingGame.CurrentTradingDay.PublishedNewsThisDay,
+            news => news.Content == "调试新闻推动金价走高");
 
         var advanceWrongStage = Assert.IsType<DebugAckMessage>(AdminCommandHandler.Handle(
             tradingGame,

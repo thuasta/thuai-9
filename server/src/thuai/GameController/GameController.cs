@@ -11,20 +11,23 @@ public partial class GameController
 
     private readonly ClockProvider _clockProvider;
     private readonly GameSettings _settings;
+    private readonly INewsGenerator _newsGenerator;
 
     private const double TpsClockFixRatio = 0.92;
 
-    public GameController(GameSettings settings)
+    public GameController(GameSettings settings, INewsGenerator? newsGenerator = null)
     {
         _settings = settings;
+        _newsGenerator = newsGenerator ?? new TemplateNewsGenerator();
         int clockMs = (int)(TpsClockFixRatio * 1000.0 / settings.TicksPerSecond);
         _clockProvider = new ClockProvider(clockMs);
-        Game = new Game(settings);
+        Game = new Game(settings, _newsGenerator);
     }
 
     public void Start()
     {
         Game.Initialize();
+        _newsGenerator.StartWarmup();
         IsRunning = true;
 
         Task.Run(async () =>

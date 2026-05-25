@@ -124,7 +124,7 @@ await self.limit_sell(price, quantity)
 await self.cancel_order(order_id)
 await self.submit_report(news_id, Prediction.LONG)
 await self.select_strategy(card_name)
-await self.activate_skill(skill_name, direction="buy")
+await self.activate_skill(skill_name, target_player_id=1)
 ```
 
 `Prediction` 取值：
@@ -222,7 +222,7 @@ limitSell(price, quantity);
 cancelOrder(orderId);
 submitReport(newsId, thuai::Prediction::Long);
 selectStrategy(cardName);
-activateSkill(skillName, "buy");
+activateSkill(skillName, 1);
 ```
 
 `Prediction` 取值：
@@ -254,6 +254,7 @@ activateSkill(skillName, "buy");
 
 ### PlayerState
 
+- `playerId` / `player_id`：自己的公开玩家编号，可与计分板 `scores[].playerId` 对照。
 - `mora`：可用摩拉。
 - `frozenMora` / `frozen_mora`：买单冻结摩拉。
 - `gold`：可用黄金。
