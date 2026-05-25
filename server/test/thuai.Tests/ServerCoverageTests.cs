@@ -651,8 +651,8 @@ public class TradingDayCoverageTests
         day.Tick();
 
         Assert.Equal(2, day.SettledReportsThisDay.Count);
-        Assert.Contains(day.SettledReportsThisDay, r => r.PlayerToken == "alpha" && r.IsCorrect == true && r.Reward != 0);
-        Assert.Contains(day.SettledReportsThisDay, r => r.PlayerToken == "beta" && r.IsCorrect == false && r.Reward != 0);
+        Assert.Contains(day.SettledReportsThisDay, r => r.PlayerToken == "alpha" && r.IsCorrect == true && r.Reward > 0);
+        Assert.Contains(day.SettledReportsThisDay, r => r.PlayerToken == "beta" && r.IsCorrect == false && r.Reward < 0);
         Assert.True(day.HasPendingNotifications);
 
         day.MarkNotificationsPublished();
