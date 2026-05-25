@@ -60,7 +60,7 @@ public class ProtocolMessageTests
     {
         var json = ParseJson(new PlayerStateMessage
         {
-            PlayerId = 7,
+            PlayerId = 0,
             Mora = 1200,
             FrozenMora = 150,
             Gold = 8,
@@ -90,7 +90,7 @@ public class ProtocolMessageTests
         });
 
         Assert.Equal("PLAYER_STATE", json.GetProperty("messageType").GetString());
-        Assert.Equal(7, json.GetProperty("playerId").GetInt32());
+        Assert.Equal(0, json.GetProperty("playerId").GetInt32());
         Assert.Equal(1200, json.GetProperty("mora").GetInt64());
         Assert.Equal(12, json.GetProperty("monthlyTradeCount").GetInt32());
 
@@ -175,13 +175,13 @@ public class ProtocolMessageTests
         {
             Day = 2,
             Month = 5,
-            WinnerToken = "alpha",
+            WinnerPlayerId = 0,
             Reason = "highest NAV",
             Players =
             [
                 new DaySettlementPlayer
                 {
-                    Token = "alpha",
+                    PlayerId = 0,
                     Nav = 1500,
                     Mora = 900,
                     Gold = 6,
@@ -192,13 +192,13 @@ public class ProtocolMessageTests
                     ActiveCards = ["Bridge"]
                 }
             ],
-            CumulativeNavs = new Dictionary<string, long> { ["alpha"] = 4500 },
-            FinalBonusWinnerToken = "beta",
+            CumulativeNavs = new Dictionary<int, long> { [0] = 4500 },
+            FinalBonusWinnerPlayerId = 1,
             FinalBonusPoints = 2
         });
         Assert.Equal(5, settlement.GetProperty("month").GetInt32());
-        Assert.Equal("beta", settlement.GetProperty("finalBonusWinnerToken").GetString());
-        Assert.Equal(4500, settlement.GetProperty("cumulativeNavs").GetProperty("alpha").GetInt64());
+        Assert.Equal(1, settlement.GetProperty("finalBonusWinnerPlayerId").GetInt32());
+        Assert.Equal(4500, settlement.GetProperty("cumulativeNavs").GetProperty("0").GetInt64());
 
         var error = ParseJson(new ErrorMessage
         {

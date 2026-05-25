@@ -54,7 +54,7 @@ struct MarketState {
 };
 
 struct PlayerState {
-  int playerId = 0;
+  int playerId = -1;
   std::int64_t mora = 0;
   std::int64_t frozenMora = 0;
   int gold = 0;
@@ -106,13 +106,13 @@ struct TradeNotification {
 
 struct SkillEffect {
   std::string skillName;
-  int sourcePlayerId = 0;
+  int sourcePlayerId = -1;
   std::optional<int> targetPlayerId;
   std::string description;
 };
 
 struct DaySettlementPlayer {
-  std::string token;
+  int playerId = -1;
   std::int64_t nav = 0;
   std::int64_t mora = 0;
   int gold = 0;
@@ -126,11 +126,11 @@ struct DaySettlementPlayer {
 struct DaySettlement {
   int day = 0;
   int month = 0;
-  std::string winnerToken;
+  int winnerPlayerId = -1;
   std::string reason;
   std::vector<DaySettlementPlayer> players;
-  std::map<std::string, std::int64_t> cumulativeNavs;
-  std::string finalBonusWinnerToken;
+  std::map<int, std::int64_t> cumulativeNavs;
+  int finalBonusWinnerPlayerId = -1;
   int finalBonusPoints = 0;
 };
 

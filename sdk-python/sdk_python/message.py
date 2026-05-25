@@ -265,6 +265,19 @@ def parse_trade_notification(data: JsonObject) -> TradeNotification:
     )
 
 
+def _optional_int(data: JsonObject, key: str) -> Optional[int]:
+    """Read an optional int field and validate its type if present."""
+
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(
+            f"Field '{key}' must be int or null, got {type(value).__name__}"
+        )
+    return value
+
+
 def parse_skill_effect(data: JsonObject) -> SkillEffect:
     """Convert a wire-format skill-effect payload into a SDK model."""
 

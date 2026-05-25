@@ -75,6 +75,14 @@ class Agent {
         variant.empty() ? std::nullopt : std::make_optional(variant)));
   }
 
+  auto getAllPlayerIds() const -> std::vector<int> {
+    std::vector<int> ids;
+    for (const auto& score : gameState.scores) {
+      ids.push_back(score.playerId);
+    }
+    return ids;
+  }
+
   // --- State ---
   GameState gameState{};
   MarketState marketState{};
@@ -220,7 +228,8 @@ class Agent {
       } else if (msgType == "SKILL_EFFECT") {
         const auto effect = protocol::parseSkillEffect(data);
         spdlog::debug(
-            "Parsed skill effect skill={} source={} target={} description={}",
+            "Parsed skill effect skill={} sourcePlayerId={} targetPlayerId={} "
+            "description={}",
             effect.skillName, effect.sourcePlayerId,
             effect.targetPlayerId.has_value()
                 ? std::to_string(*effect.targetPlayerId)
@@ -230,9 +239,11 @@ class Agent {
       } else if (msgType == "DAY_SETTLEMENT") {
         latestDaySettlement = protocol::parseDaySettlement(data);
         spdlog::debug(
-            "Parsed day settlement month={} day={} winner={} players={}",
+            "Parsed day settlement month={} day={} winnerPlayerId={} "
+            "players={}",
             latestDaySettlement->month, latestDaySettlement->day,
-            latestDaySettlement->winnerToken, latestDaySettlement->players.size());
+            latestDaySettlement->winnerPlayerId,
+            latestDaySettlement->players.size());
         onDaySettlement(*latestDaySettlement);
       } else if (msgType == "ERROR") {
         const int code = data.value("errorCode", 0);

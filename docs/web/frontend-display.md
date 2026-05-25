@@ -169,15 +169,11 @@ Player 首期保留人工调试入口：
 
 1. 建立 WebSocket 连接。
 2. 发送 `HELLO`。
-3. 接收 `HELLO_ACK`。
-4. 接收当前快照。
-5. 持续接收 Tick snapshot 与 event。
-6. 断线后指数退避重连，重连后重新 `HELLO`。
+3. 收到 `PLAYER_STATE`（包含分配的 `playerId`）。
+4. 持续接收 Tick snapshot 与 event。
+5. 断线后指数退避重连，重连后重新 `HELLO`。
 
-当前后端尚未实现 `HELLO` 时，前端可以进入 legacy 模式：
-
-- Player 可直接发送带 token 的动作消息触发旧式懒绑定。
-- Observer 无法纯观战，需要后端补 observer socket 管理后才完整可用。
+后端已完整实现 `HELLO` 握手和 Observer / Admin 角色支持，前端通过 `HELLO` 即可接入。
 
 Player 握手：
 
@@ -238,17 +234,17 @@ type Candle = {
 - `PLAYER_STATE` 是私有状态，只发给对应玩家。
 - `PLAYER_SUMMARY_STATE` 是 observer 摘要，不包含完整挂单列表。
 - `MARKET_STATE` 在 player 视角可能包含技能造成的伪盘口；observer 应接收公共真实盘口。
-- `REPORT_RESULT` 在 player 侧可不带 `playerToken`，observer 侧建议补充 `playerToken`。
+- `REPORT_RESULT` 在 player 侧可不带 `playerId`，observer 侧建议补充 `playerId`。
 
 ## 结算展示
 
 `DAY_SETTLEMENT` 建议字段：
 
 - `day`。
-- `winnerToken`。
+- `winnerPlayerId`。
 - `reason`：`NAV`、`TradeCount` 或 `Tie`。
 - `scores`。
-- `players[].token`。
+- `players[].playerId`。
 - `players[].nav`。
 - `players[].tradeCount`。
 - `players[].mora`、`players[].gold` 可选。

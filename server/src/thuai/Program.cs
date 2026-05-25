@@ -448,7 +448,7 @@ public class Program
         var players = game.Players.Values
             .Select(player => new DaySettlementPlayer
             {
-                Token = player.Token,
+                PlayerId = player.PlayerId,
                 Nav = settlement.MonthNavs.GetValueOrDefault(player.Token, player.CalculateNAV(midPrice)),
                 Mora = player.Mora,
                 Gold = player.Gold,
@@ -462,15 +462,25 @@ public class Program
             .ThenByDescending(player => player.TradeCount)
             .ToList();
 
+        var winnerPlayerId = game.FindPlayer(settlement.WinnerToken)?.PlayerId ?? -1;
+        var finalBonusWinnerPlayerId = game.FindPlayer(settlement.FinalBonusWinnerToken)?.PlayerId ?? -1;
+        var cumulativeNavsById = new Dictionary<int, long>();
+        foreach (var (token, nav) in settlement.CumulativeNavs)
+        {
+            var player = game.FindPlayer(token);
+            if (player != null)
+                cumulativeNavsById[player.PlayerId] = nav;
+        }
+
         return new DaySettlementMessage
         {
             Day = settlement.Month,
             Month = settlement.Month,
-            WinnerToken = settlement.WinnerToken,
+            WinnerPlayerId = winnerPlayerId,
             Reason = settlement.Reason,
             Players = players,
-            CumulativeNavs = settlement.CumulativeNavs,
-            FinalBonusWinnerToken = settlement.FinalBonusWinnerToken,
+            CumulativeNavs = cumulativeNavsById,
+            FinalBonusWinnerPlayerId = finalBonusWinnerPlayerId,
             FinalBonusPoints = settlement.FinalBonusPoints
         };
     }

@@ -143,7 +143,7 @@ class ProtocolParserTests(unittest.TestCase):
 
         state = parse_player_state(
             {
-                "playerId": 7,
+                "playerId": 0,
                 "mora": 1200,
                 "frozenMora": 150,
                 "gold": 7,
@@ -171,7 +171,7 @@ class ProtocolParserTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(7, state.player_id)
+        self.assertEqual(0, state.player_id)
         self.assertEqual(1200, state.mora)
         self.assertEqual(150, state.frozen_mora)
         self.assertEqual(14, state.monthly_trade_count)
@@ -424,7 +424,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
             json.dumps(
                 {
                     "messageType": "PLAYER_STATE",
-                    "playerId": 7,
+                    "playerId": 0,
                     "mora": 1200,
                     "frozenMora": 150,
                     "gold": 7,
@@ -524,9 +524,9 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [
                 {
-                    "messageType": "CANCEL_ORDER",
+                    "messageType": "HELLO",
                     "token": "player-1",
-                    "orderId": -1,
+                    "role": "player",
                 }
             ],
             [json.loads(payload) for payload in fake_ws.sent_messages],

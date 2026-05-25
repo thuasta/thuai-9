@@ -265,8 +265,8 @@ public record DaySettlementMessage : Message
     [JsonPropertyName("month")]
     public int Month { get; init; }
 
-    [JsonPropertyName("winnerToken")]
-    public string WinnerToken { get; init; } = "";
+    [JsonPropertyName("winnerPlayerId")]
+    public int WinnerPlayerId { get; init; }
 
     [JsonPropertyName("reason")]
     public string Reason { get; init; } = "";
@@ -275,10 +275,10 @@ public record DaySettlementMessage : Message
     public List<DaySettlementPlayer>? Players { get; init; }
 
     [JsonPropertyName("cumulativeNavs")]
-    public Dictionary<string, long>? CumulativeNavs { get; init; }
+    public Dictionary<int, long>? CumulativeNavs { get; init; }
 
-    [JsonPropertyName("finalBonusWinnerToken")]
-    public string FinalBonusWinnerToken { get; init; } = "";
+    [JsonPropertyName("finalBonusWinnerPlayerId")]
+    public int FinalBonusWinnerPlayerId { get; init; }
 
     [JsonPropertyName("finalBonusPoints")]
     public int FinalBonusPoints { get; init; }
@@ -286,8 +286,8 @@ public record DaySettlementMessage : Message
 
 public record DaySettlementPlayer
 {
-    [JsonPropertyName("token")]
-    public string Token { get; init; } = "";
+    [JsonPropertyName("playerId")]
+    public int PlayerId { get; init; }
 
     [JsonPropertyName("nav")]
     public long Nav { get; init; }
@@ -358,10 +358,10 @@ public record DebugQueryResponseMessage : Message
     public int CurrentTick { get; init; }
 
     [JsonPropertyName("scoreboard")]
-    public Dictionary<string, int>? Scoreboard { get; init; }
+    public Dictionary<int, int>? Scoreboard { get; init; }
 
     [JsonPropertyName("cumulativeNavs")]
-    public Dictionary<string, long>? CumulativeNavs { get; init; }
+    public Dictionary<int, long>? CumulativeNavs { get; init; }
 
     [JsonPropertyName("players")]
     public List<DebugPlayerSnapshot>? Players { get; init; }
@@ -372,6 +372,9 @@ public record DebugQueryResponseMessage : Message
 
 public record DebugPlayerSnapshot
 {
+    [JsonPropertyName("playerId")]
+    public int PlayerId { get; init; }
+
     [JsonPropertyName("token")]
     public string Token { get; init; } = "";
 

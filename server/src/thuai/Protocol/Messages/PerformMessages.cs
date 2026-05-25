@@ -90,8 +90,8 @@ public record DebugGiveCardMessage : PerformMessage
 {
     public override string MessageType => "DEBUG_GIVE_CARD";
 
-    [JsonPropertyName("targetToken")]
-    public string TargetToken { get; init; } = "";
+    [JsonPropertyName("targetPlayerId")]
+    public int? TargetPlayerId { get; init; }
 
     [JsonPropertyName("cardName")]
     public string CardName { get; init; } = "";
@@ -117,8 +117,8 @@ public record DebugSetPlayerMessage : PerformMessage
 {
     public override string MessageType => "DEBUG_SET_PLAYER";
 
-    [JsonPropertyName("targetToken")]
-    public string TargetToken { get; init; } = "";
+    [JsonPropertyName("targetPlayerId")]
+    public int? TargetPlayerId { get; init; }
 
     [JsonPropertyName("mora")]
     public long? Mora { get; init; }

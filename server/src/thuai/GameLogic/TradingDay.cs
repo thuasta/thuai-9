@@ -207,6 +207,13 @@ public class TradingDay
             if (_isFinished) return false;
             if (!_players.TryGetValue(playerToken, out var player)) return false;
 
+            if (targetPlayerId.HasValue)
+            {
+                var targetPlayer = _players.Values.FirstOrDefault(p => p.PlayerId == targetPlayerId.Value);
+                if (targetPlayer == null) return false;
+                targetToken = targetPlayer.Token;
+            }
+
             var card = StrategyCardManager.FindActiveCard(player, skillName);
             if (card == null) return false;
 

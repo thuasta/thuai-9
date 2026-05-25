@@ -233,13 +233,13 @@ public class ProtocolCoverageTests
         {
             Day = 2,
             Month = 5,
-            WinnerToken = "alpha",
+            WinnerPlayerId = 0,
             Reason = "higher NAV",
             Players =
             [
                 new DaySettlementPlayer
                 {
-                    Token = "alpha",
+                    PlayerId = 0,
                     Nav = 1500,
                     Mora = 1000,
                     Gold = 2,
@@ -250,13 +250,13 @@ public class ProtocolCoverageTests
                     ActiveCards = ["闪电交易"]
                 }
             ],
-            CumulativeNavs = new Dictionary<string, long> { ["alpha"] = 2500 },
-            FinalBonusWinnerToken = "beta",
+            CumulativeNavs = new Dictionary<int, long> { [0] = 2500 },
+            FinalBonusWinnerPlayerId = 1,
             FinalBonusPoints = 2
         });
         Assert.Equal(2, settlement.GetProperty("day").GetInt32());
-        Assert.Equal("beta", settlement.GetProperty("finalBonusWinnerToken").GetString());
-        Assert.Equal(2500, settlement.GetProperty("cumulativeNavs").GetProperty("alpha").GetInt64());
+        Assert.Equal(1, settlement.GetProperty("finalBonusWinnerPlayerId").GetInt32());
+        Assert.Equal(2500, settlement.GetProperty("cumulativeNavs").GetProperty("0").GetInt64());
 
         var error = ParseJson(new ErrorMessage
         {
@@ -636,7 +636,7 @@ public class TradingDayCoverageTests
     [Fact]
     public void HandleSubmitReport_SettlesReportsAndPublishesNotifications()
     {
-        var (day, players) = CreateTradingDay(maxTicks: 5);
+        var (day, _) = CreateTradingDay(maxTicks: 5);
         day.OrderBook.Clear();
         day.OrderBook.UpdateLastPrice(1000);
 
@@ -646,11 +646,13 @@ public class TradingDayCoverageTests
 
         day.Tick();
         day.Tick();
+        day.OrderBook.Clear();
         day.OrderBook.UpdateLastPrice(2000);
         day.Tick();
 
         Assert.Equal(2, day.SettledReportsThisDay.Count);
-        Assert.True(players["alpha"].Mora > players["beta"].Mora);
+        Assert.Contains(day.SettledReportsThisDay, r => r.PlayerToken == "alpha" && r.IsCorrect == true && r.Reward > 0);
+        Assert.Contains(day.SettledReportsThisDay, r => r.PlayerToken == "beta" && r.IsCorrect == false && r.Reward < 0);
         Assert.True(day.HasPendingNotifications);
 
         day.MarkNotificationsPublished();

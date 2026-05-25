@@ -940,7 +940,7 @@ public class GameTests
     }
 
     [Fact]
-    public void AddPlayer_AfterWaiting_Fails()
+    public void AddPlayer_AfterWaiting_Succeeds()
     {
         var settings = CreateDefaultSettings();
         settings = settings with { PlayerWaitingTicks = 1 };
@@ -957,9 +957,11 @@ public class GameTests
 
         Assert.NotEqual(GameStage.Waiting, game.Stage);
 
-        // Now try to add a player - should fail
+        // New players can join at any stage (server runs 24/7, agents may reconnect)
         bool result = game.AddPlayer("p3");
-        Assert.False(result);
+        Assert.True(result);
+        Assert.Equal(3, game.Players.Count);
+        Assert.True(game.Players.ContainsKey("p3"));
     }
 
     [Fact]
