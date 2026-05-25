@@ -36,11 +36,13 @@ TEST_CASE("protocol builders serialize outbound actions") {
     CHECK(activate_skill["messageType"] == "ACTIVATE_SKILL");
     CHECK(activate_skill["token"] == "player-1");
     CHECK(activate_skill["skillName"] == "MarketRadar");
+    CHECK_FALSE(activate_skill.contains("targetPlayerId"));
     CHECK_FALSE(activate_skill.contains("targetToken"));
     CHECK_FALSE(activate_skill.contains("variant"));
 
-    json targeted_skill = buildActivateSkillMessage("player-1", "Freeze", std::string("player-2"), std::string("intense"));
-    CHECK(targeted_skill["targetToken"] == "player-2");
+    json targeted_skill = buildActivateSkillMessage("player-1", "Freeze", 1, std::string("intense"));
+    CHECK(targeted_skill["targetPlayerId"] == 1);
+    CHECK_FALSE(targeted_skill.contains("targetToken"));
     CHECK(targeted_skill["variant"] == "intense");
 
     json report = buildSubmitReportMessage("player-3", 8, Prediction::Short);
@@ -74,6 +76,7 @@ TEST_CASE("game state parser reads current protocol fields") {
 
 TEST_CASE("player state parser handles nested orders and active cards") {
     thuai::PlayerState state = parsePlayerState(json{
+        {"playerId", 7},
         {"mora", 1400},
         {"frozenMora", 120},
         {"gold", 9},
@@ -100,6 +103,7 @@ TEST_CASE("player state parser handles nested orders and active cards") {
         })},
     });
 
+    CHECK(state.playerId == 7);
     CHECK(state.mora == 1400);
     CHECK(state.monthlyTradeCount == 17);
     REQUIRE(state.activeCards.size() == 2);
@@ -162,12 +166,14 @@ TEST_CASE("strategy and skill parsers handle optional fields") {
 
     thuai::SkillEffect effect = parseSkillEffect(json{
         {"skillName", "Hedge"},
-        {"sourcePlayer", "alpha"},
+        {"sourcePlayerId", 0},
+        {"targetPlayerId", 1},
         {"description", "Protected against one loss"},
     });
     CHECK(effect.skillName == "Hedge");
-    CHECK(effect.sourcePlayer == "alpha");
-    CHECK_FALSE(effect.targetPlayer.has_value());
+    CHECK(effect.sourcePlayerId == 0);
+    REQUIRE(effect.targetPlayerId.has_value());
+    CHECK(*effect.targetPlayerId == 1);
     CHECK(effect.description == "Protected against one loss");
 }
 

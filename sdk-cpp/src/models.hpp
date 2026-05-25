@@ -54,6 +54,7 @@ struct MarketState {
 };
 
 struct PlayerState {
+  int playerId = 0;
   std::int64_t mora = 0;
   std::int64_t frozenMora = 0;
   int gold = 0;
@@ -105,8 +106,8 @@ struct TradeNotification {
 
 struct SkillEffect {
   std::string skillName;
-  std::string sourcePlayer;
-  std::optional<std::string> targetPlayer;
+  int sourcePlayerId = 0;
+  std::optional<int> targetPlayerId;
   std::string description;
 };
 

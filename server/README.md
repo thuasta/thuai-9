@@ -104,6 +104,37 @@ On first launch, the server creates `config/config.json` with default settings:
 Player tokens are loaded from the `TOKENS` environment variable (comma-separated) or from a file at the path in `tokenLocation` if `loadTokenFromEnv` is `false`.
 Set `server.acceptAnyToken` to `true` to accept any non-empty player token instead of enforcing the preloaded token list.
 
+### LLM News Generation
+
+The news system can generate game news through an OpenAI-compatible chat-completions endpoint, with template news as a fallback. For the local `llama-server` setup, use:
+
+```json
+{
+  "newsGeneration": {
+    "enabled": true,
+    "provider": "openai-compatible",
+    "baseUrl": "http://localhost:8080/v1",
+    "chatCompletionsPath": "/chat/completions",
+    "apiKey": "",
+    "apiKeyEnv": "THUAI_LLM_API_KEY",
+    "model": "local-model",
+    "maxTokens": 256,
+    "timeoutMs": 1500,
+    "prewarmTimeoutMs": 20000,
+    "chatTemplateEnableThinking": false,
+    "prewarmEnabled": true,
+    "prewarmPerSentiment": 8,
+    "prewarmConcurrency": 2,
+    "refillThreshold": 2,
+    "refillBatchSize": 4
+  }
+}
+```
+
+`baseUrl`, `chatCompletionsPath`, `apiKey`, `apiKeyEnv`, and `model` are the only fields normally needed when switching providers or models. If `apiKey` is empty, the server reads `apiKeyEnv`; if both are empty or missing, it sends no `Authorization` header. `chatTemplateEnableThinking` is optional and sends `chat_template_kwargs.enable_thinking`; set it to `false` for local reasoning models that otherwise spend their token budget in hidden reasoning before producing `content`.
+
+When the game controller starts, the LLM generator prewarms a per-sentiment pool of news items using `prewarmTimeoutMs`. Runtime news publication first consumes the prepared pool, then does a short synchronous request using `timeoutMs` only if the pool is empty, and finally falls back to the built-in templates if the endpoint fails or times out. The `systemPrompt` field is configurable and defaults to a Chinese 华清街快报 prompt that requires a JSON response: `{"content":"新闻正文"}`.
+
 ---
 
 ## Architecture
@@ -123,7 +154,7 @@ Server Process
 ├── TradingDay (per-round)
 │   ├── OrderBook (price-time priority, SortedSet)
 │   ├── MatchEngine (order matching, trade execution)
-│   ├── NewsSystem (璃月快报, every 200-400 ticks)
+│   ├── NewsSystem (华清街快报, fixed monthly days, optional LLM prewarm pool)
 │   ├── NPCTrader (system liquidity)
 │   ├── ResearchSystem (research reports with time decay)
 │   └── Strategy card effects (per tick)
@@ -175,7 +206,7 @@ JSON messages over WebSocket with `messageType` discriminator.
 | `GAME_STATE`         | All                    | Current stage, day, tick, scoreboard                                        |
 | `MARKET_STATE`       | Per-player             | Order book bids/asks, last/mid price, volume                                |
 | `PLAYER_STATE`       | Private                | Player's Mora/Gold (avail/frozen/locked), NAV, pending orders, active cards |
-| `NEWS_BROADCAST`     | All (or insider early) | 璃月快报 news content                                                       |
+| `NEWS_BROADCAST`     | All (or insider early) | 华清街快报 news content                                                     |
 | `REPORT_RESULT`      | Private                | Research report outcome (correct/incorrect, reward)                         |
 | `STRATEGY_OPTIONS`   | All                    | Available cards during draft phase                                          |
 | `TRADE_NOTIFICATION` | Private                | When player's order executes                                                |

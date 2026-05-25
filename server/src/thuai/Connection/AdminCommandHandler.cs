@@ -99,10 +99,11 @@ public static class AdminCommandHandler
         if (!Enum.TryParse<NewsSentiment>(msg.Sentiment, ignoreCase: true, out var sentiment))
             return Ack(msg.MessageType, false, $"sentiment must be Bullish or Bearish, got: {msg.Sentiment}");
 
-        var news = game.CurrentTradingDay.NewsSystem.InjectFakeNews(
+        var news = game.CurrentTradingDay.InjectFakeNews(
             game.CurrentTradingDay.CurrentTick,
             sourcePlayer: "DEBUG",
-            sentiment);
+            sentiment,
+            msg.Content);
         Log.Information("DEBUG_INJECT_NEWS: id={Id} sentiment={Sentiment}", news.NewsId, sentiment);
         return Ack(msg.MessageType, true);
     }

@@ -50,6 +50,7 @@ public class ProtocolMessageTests
 
         Assert.Equal("ACTIVATE_SKILL", json.GetProperty("messageType").GetString());
         Assert.Equal("MarketRadar", json.GetProperty("skillName").GetString());
+        Assert.False(json.TryGetProperty("targetPlayerId", out _));
         Assert.False(json.TryGetProperty("targetToken", out _));
         Assert.False(json.TryGetProperty("variant", out _));
     }
@@ -59,6 +60,7 @@ public class ProtocolMessageTests
     {
         var json = ParseJson(new PlayerStateMessage
         {
+            PlayerId = 7,
             Mora = 1200,
             FrozenMora = 150,
             Gold = 8,
@@ -88,6 +90,7 @@ public class ProtocolMessageTests
         });
 
         Assert.Equal("PLAYER_STATE", json.GetProperty("messageType").GetString());
+        Assert.Equal(7, json.GetProperty("playerId").GetInt32());
         Assert.Equal(1200, json.GetProperty("mora").GetInt64());
         Assert.Equal(12, json.GetProperty("monthlyTradeCount").GetInt32());
 
@@ -161,12 +164,12 @@ public class ProtocolMessageTests
         var skillEffect = ParseJson(new SkillEffectMessage
         {
             SkillName = "Hedge",
-            SourcePlayer = "alpha",
+            SourcePlayerId = 0,
             Description = "Protected against the next loss"
         });
         Assert.Equal("SKILL_EFFECT", skillEffect.GetProperty("messageType").GetString());
-        Assert.Equal("alpha", skillEffect.GetProperty("sourcePlayer").GetString());
-        Assert.False(skillEffect.TryGetProperty("targetPlayer", out _));
+        Assert.Equal(0, skillEffect.GetProperty("sourcePlayerId").GetInt32());
+        Assert.False(skillEffect.TryGetProperty("targetPlayerId", out _));
 
         var settlement = ParseJson(new DaySettlementMessage
         {

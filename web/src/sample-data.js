@@ -76,6 +76,7 @@ export function buildSampleMessages(role = "observer") {
     if (tick === 18) {
       messages.push({
         messageType: "PLAYER_STATE",
+        playerId: 0,
         mora: 982400,
         frozenMora: 18000,
         gold: 1004,
@@ -133,7 +134,7 @@ export function buildSampleMessages(role = "observer") {
       messages.push({
         messageType: "SKILL_EFFECT",
         skillName: "拔网线",
-        sourcePlayer: "player2",
+        sourcePlayerId: 1,
         description: "交易所进入熔断状态 20 Tick。",
       });
     }

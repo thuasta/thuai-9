@@ -87,7 +87,7 @@ await agent.limit_sell(price: int, quantity: int)
 await agent.cancel_order(order_id: int)
 await agent.submit_report(news_id: int, prediction: Prediction)
 await agent.select_strategy(card_name: str)
-await agent.activate_skill(skill_name: str, direction: str | None = None)
+await agent.activate_skill(skill_name: str, target_player_id: int | None = None, variant: str | None = None)
 ```
 
 #### Event Handlers (override these)
@@ -119,6 +119,7 @@ All models are dataclasses. Wire format uses camelCase, Python uses snake_case (
 ### `PlayerState` (private to you)
 
 ```python
+player_id: int           # your public player id
 mora: int               # available Mora
 frozen_mora: int        # locked in pending buy orders
 gold: int               # available gold

@@ -3,6 +3,7 @@ namespace Thuai.GameLogic;
 public class NewsSystem
 {
     private readonly Random _rng = new();
+    private readonly INewsGenerator _newsGenerator;
     private readonly int _researchWindow;
     private static readonly int[] ScheduledNewsDays = [1, 11, 21];
     private int _nextNewsId = 1;
@@ -13,36 +14,13 @@ public class NewsSystem
     private News? _latestNews;
     private News? _preGeneratedNews;
 
-    private static readonly string[] BullishNews =
-    [
-        "华清街‘大妈扫货团’倾巢出动，各大金店柜台已被扫荡至只剩标签",
-        "知名算命先生断言本月‘五行缺金’，市民纷纷疯狂囤积金条以求转运",
-        "华清街神秘富豪宣布将用纯金铺设私人厕所，实物金现货供应瞬间告急",
-        "运金马车在桥头发生连环追尾，全城金条延迟入库，现货溢价直线飙升",
-        "街道办宣布：为抵御摩拉通胀，即日起无限期开启黄金战略储备收购计划",
-        "商会主席之子大婚，钦定‘黄金铺路’，十里长街库存被瞬间清空",
-        "隔壁街区宣布严禁黄金流出，华清街金价应声起飞，空头集体‘上天’",
-        "矿井深处发现爱吃金属的稀有怪兽，开采被迫暂停，黄金生产成本翻倍",
-        "华清街流行起‘点金箔奶茶’，年轻人连摩拉都不存了，全喝进了肚子里",
-        "华清街‘懂王’发布万字研报：黄金不仅是货币，更是信仰，建议满仓"
-    ];
-
-    private static readonly string[] BearishNews =
-    [
-        "华清街公厕翻修意外挖出前朝大金库，黄金市场供应量瞬间‘爆表’",
-        "隔壁街区银行为了填补亏空，正在低价抛售黄金换取摩拉，金价承压",
-        "街道办决定取消今年的‘金漆刷墙’工程，黄金采购预算被砍掉九成",
-        "某落魄民科声称发明‘点石成金术’，虽未证实但已引发市场恐慌性抛售",
-        "执法队突击检查非法炒金团伙，多个‘致富群’被封，市场陷入流动性危机",
-        "华清街著名黄金多头突然改行卖烧饼，临走前清空了所有金条仓位",
-        "满载黄金的船队因顺风提前抵达，码头工位被金砖填满，供应彻底饱和",
-        "官方考虑征收‘反暴利税’，持有黄金超过十斤者需额外缴纳巨额摩拉",
-        "交易所被爆出‘黄金券’超发，实物黄金根本不够兑换，金价应声暴跌",
-        "曾经坚定的看多专家今日改口：黄金太重不好带，还是存摩拉最实在"
-    ];
-
-    public NewsSystem(int intervalMin = 1, int intervalMax = 1, int researchWindow = 2)
+    public NewsSystem(
+        int intervalMin = 1,
+        int intervalMax = 1,
+        int researchWindow = 2,
+        INewsGenerator? newsGenerator = null)
     {
+        _newsGenerator = newsGenerator ?? new TemplateNewsGenerator();
         _researchWindow = researchWindow;
         _scheduledIndex = 0;
         _nextNewsTick = ScheduledNewsDays[0];
@@ -104,8 +82,7 @@ public class NewsSystem
     private News GenerateNews(int publishTick)
     {
         var sentiment = _rng.Next(2) == 0 ? NewsSentiment.Bullish : NewsSentiment.Bearish;
-        var templates = sentiment == NewsSentiment.Bullish ? BullishNews : BearishNews;
-        var content = templates[_rng.Next(templates.Length)];
+        var content = _newsGenerator.GenerateContent(new NewsGenerationRequest(sentiment, publishTick));
 
         return new News
         {
@@ -118,16 +95,25 @@ public class NewsSystem
         };
     }
 
-    public News InjectFakeNews(int currentTick, string sourcePlayer, NewsSentiment sentiment)
+    public News InjectFakeNews(
+        int currentTick,
+        string sourcePlayer,
+        NewsSentiment sentiment,
+        string? content = null)
     {
-        var templates = sentiment == NewsSentiment.Bullish ? BullishNews : BearishNews;
-        var content = templates[_rng.Next(templates.Length)];
+        var newsContent = string.IsNullOrWhiteSpace(content)
+            ? _newsGenerator.GenerateContent(new NewsGenerationRequest(
+                sentiment,
+                currentTick,
+                IsFake: true,
+                SourcePlayer: sourcePlayer))
+            : content.Trim();
 
         var news = new News
         {
             NewsId = _nextNewsId++,
             PublishTick = currentTick,
-            Content = content,
+            Content = newsContent,
             Sentiment = sentiment,
             IsFake = true,
             SourcePlayer = sourcePlayer
@@ -166,13 +152,16 @@ public class NewsSystem
     public News CreateSpoofedView(News source)
     {
         var sentiment = _rng.Next(2) == 0 ? NewsSentiment.Bullish : NewsSentiment.Bearish;
-        var templates = sentiment == NewsSentiment.Bullish ? BullishNews : BearishNews;
 
         return new News
         {
             NewsId = source.NewsId,
             PublishTick = source.PublishTick,
-            Content = templates[_rng.Next(templates.Length)],
+            Content = _newsGenerator.GenerateContent(new NewsGenerationRequest(
+                sentiment,
+                source.PublishTick,
+                source.IsFake,
+                source.SourcePlayer)),
             Sentiment = sentiment,
             IsFake = source.IsFake,
             SourcePlayer = source.SourcePlayer

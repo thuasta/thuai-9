@@ -2,7 +2,7 @@ namespace Thuai.GameLogic;
 
 using Thuai.GameLogic.StrategyCards;
 
-public record SkillActivation(string SourcePlayer, string SkillName, string Description, string? TargetPlayer = null);
+public record SkillActivation(int SourcePlayerId, string SkillName, string Description, int? TargetPlayerId = null);
 
 public class TradingDay
 {
@@ -50,7 +50,8 @@ public class TradingDay
         int researchSettlementDelay,
         long baseResearchReward,
         int npcOrdersPerTick,
-        int monthNumber = 1)
+        int monthNumber = 1,
+        INewsGenerator? newsGenerator = null)
     {
         MonthNumber = monthNumber;
         _maxTicks = maxTicks;
@@ -58,7 +59,7 @@ public class TradingDay
         _players = players;
         _orderBook = new OrderBook(initialGoldPrice);
         _matchEngine = new MatchEngine(_orderBook, players);
-        _newsSystem = new NewsSystem(newsIntervalMin, newsIntervalMax, researchWindow);
+        _newsSystem = new NewsSystem(newsIntervalMin, newsIntervalMax, researchWindow, newsGenerator);
         _npcTrader = new NPCTrader(npcOrdersPerTick);
         _researchSystem = new ResearchSystem(_newsSystem, baseResearchReward, researchWindow, researchSettlementDelay);
     }
@@ -141,6 +142,17 @@ public class TradingDay
         _hasPendingNotifications = false;
     }
 
+    public News InjectFakeNews(int currentTick, string sourcePlayer, NewsSentiment sentiment, string? content = null)
+    {
+        lock (_lock)
+        {
+            var news = _newsSystem.InjectFakeNews(currentTick, sourcePlayer, sentiment, content);
+            _publishedNewsThisDay.Add(news);
+            _hasPendingNotifications = true;
+            return news;
+        }
+    }
+
     public bool HandleLimitBuy(string playerToken, long price, int quantity)
     {
         lock (_lock)
@@ -183,7 +195,12 @@ public class TradingDay
         }
     }
 
-    public bool HandleActivateSkill(string playerToken, string skillName, string? targetToken = null, string? variant = null)
+    public bool HandleActivateSkill(
+        string playerToken,
+        string skillName,
+        int? targetPlayerId = null,
+        string? targetToken = null,
+        string? variant = null)
     {
         lock (_lock)
         {
@@ -199,7 +216,7 @@ public class TradingDay
                 FlashTrading flash => ActivateFlashTrading(player, flash),
                 StopLossBlade blade => ActivateStopLossBlade(player, blade),
                 TargetedPurchase targeted => ActivateTargetedPurchase(player, targeted),
-                NetworkStorm storm => ActivateNetworkStorm(player, storm, targetToken),
+                NetworkStorm storm => ActivateNetworkStorm(player, storm, targetPlayerId, targetToken),
                 PublicOpinionAttack attack => ActivatePublicOpinionAttack(player, attack),
                 _ => false
             };
@@ -353,7 +370,7 @@ public class TradingDay
         player.AddMora(-cost);
         insider.Activate(player, _currentTick, nextNewsDay, cheapMode, previewIsFake);
         _skillEffectsThisDay.Add(new SkillActivation(
-            player.Token,
+            player.PlayerId,
             insider.Name,
             cheapMode ? $"cheap preview for day {nextNewsDay}" : $"premium preview for day {nextNewsDay}"));
         return true;
@@ -366,7 +383,7 @@ public class TradingDay
 
         player.AddMora(-flash.ActivationCost);
         flash.OnActivate(player, _currentTick);
-        _skillEffectsThisDay.Add(new SkillActivation(player.Token, flash.Name, "gains one extra immediate trade for the next 3 days"));
+        _skillEffectsThisDay.Add(new SkillActivation(player.PlayerId, flash.Name, "gains one extra immediate trade for the next 3 days"));
         return true;
     }
 
@@ -382,7 +399,7 @@ public class TradingDay
 
         player.AddMora(-blade.ActivationCost);
         blade.Activate(player, _currentTick, _orderBook.MidPrice);
-        _skillEffectsThisDay.Add(new SkillActivation(player.Token, blade.Name, "all open orders cancelled and downside protection enabled"));
+        _skillEffectsThisDay.Add(new SkillActivation(player.PlayerId, blade.Name, "all open orders cancelled and downside protection enabled"));
         return true;
     }
 
@@ -400,15 +417,17 @@ public class TradingDay
         player.AddMora(-cost);
         player.AddLockedGold(targeted.PurchaseQuantity, _currentTick + targeted.LockDuration);
         targeted.MarkUsed();
-        _skillEffectsThisDay.Add(new SkillActivation(player.Token, targeted.Name, $"bought {targeted.PurchaseQuantity} locked gold at {discountPrice}"));
+        _skillEffectsThisDay.Add(new SkillActivation(player.PlayerId, targeted.Name, $"bought {targeted.PurchaseQuantity} locked gold at {discountPrice}"));
         return true;
     }
 
-    private bool ActivateNetworkStorm(Player player, NetworkStorm storm, string? targetToken)
+    private bool ActivateNetworkStorm(Player player, NetworkStorm storm, int? targetPlayerId, string? targetToken)
     {
-        if (!storm.CanUse || string.IsNullOrWhiteSpace(targetToken))
+        if (!storm.CanUse)
             return false;
-        if (!_players.TryGetValue(targetToken, out var targetPlayer))
+
+        var targetPlayer = ResolveTargetPlayer(targetPlayerId, targetToken);
+        if (targetPlayer == null)
             return false;
         if (player.Mora < storm.ActivationCost)
             return false;
@@ -416,8 +435,18 @@ public class TradingDay
         player.AddMora(-storm.ActivationCost);
         targetPlayer.AddNextOrderExtraDelayDays(1);
         storm.MarkUsed();
-        _skillEffectsThisDay.Add(new SkillActivation(player.Token, storm.Name, "next order delayed by 1 day", targetToken));
+        _skillEffectsThisDay.Add(new SkillActivation(player.PlayerId, storm.Name, "next order delayed by 1 day", targetPlayer.PlayerId));
         return true;
+    }
+
+    private Player? ResolveTargetPlayer(int? targetPlayerId, string? targetToken)
+    {
+        if (targetPlayerId.HasValue)
+            return _players.Values.FirstOrDefault(target => target.PlayerId == targetPlayerId.Value);
+
+        return !string.IsNullOrWhiteSpace(targetToken) && _players.TryGetValue(targetToken, out var targetPlayer)
+            ? targetPlayer
+            : null;
     }
 
     private bool ActivatePublicOpinionAttack(Player player, PublicOpinionAttack attack)
@@ -431,8 +460,7 @@ public class TradingDay
         var sentiment = Random.Shared.Next(2) == 0
             ? NewsSentiment.Bullish
             : NewsSentiment.Bearish;
-        var fakeNews = _newsSystem.InjectFakeNews(_currentTick, player.Token, sentiment);
-        _publishedNewsThisDay.Add(fakeNews);
+        InjectFakeNews(_currentTick, player.Token, sentiment);
 
         foreach (var other in _players.Values.Where(other => other.Token != player.Token))
         {
@@ -440,7 +468,7 @@ public class TradingDay
             other.PendingCheapInsiderCorruption = true;
         }
 
-        _skillEffectsThisDay.Add(new SkillActivation(player.Token, attack.Name, "broadcasted a fake market news item"));
+        _skillEffectsThisDay.Add(new SkillActivation(player.PlayerId, attack.Name, "broadcasted a fake market news item"));
         return true;
     }
 }

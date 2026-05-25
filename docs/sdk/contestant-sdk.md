@@ -124,7 +124,7 @@ await self.limit_sell(price, quantity)
 await self.cancel_order(order_id)
 await self.submit_report(news_id, Prediction.LONG)
 await self.select_strategy(card_name)
-await self.activate_skill(skill_name, direction="buy")
+await self.activate_skill(skill_name, target_player_id=1)
 ```
 
 `Prediction` 取值：
@@ -222,7 +222,7 @@ limitSell(price, quantity);
 cancelOrder(orderId);
 submitReport(newsId, thuai::Prediction::Long);
 selectStrategy(cardName);
-activateSkill(skillName, "buy");
+activateSkill(skillName, 1);
 ```
 
 `Prediction` 取值：
@@ -254,6 +254,7 @@ activateSkill(skillName, "buy");
 
 ### PlayerState
 
+- `playerId` / `player_id`：自己的公开玩家编号，可与计分板 `scores[].playerId` 对照。
 - `mora`：可用摩拉。
 - `frozenMora` / `frozen_mora`：买单冻结摩拉。
 - `gold`：可用黄金。
@@ -298,14 +299,14 @@ selectStrategy("内幕消息");
 激活技能：
 
 ```python
-await self.activate_skill("暗池交易", direction="buy")
+await self.activate_skill("网络风暴", target_player_id=1)
 ```
 
 ```cpp
-activateSkill("暗池交易", "buy");
+activateSkill("网络风暴", 1);
 ```
 
-`direction` 当前主要用于“暗池交易”，取 `buy` 或 `sell`。
+有目标技能使用公开 `playerId` 指定目标；例如 `网络风暴` 使用 `target_player_id` / `targetPlayerId`。
 
 ## 常见陷阱
 

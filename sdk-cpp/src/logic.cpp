@@ -121,8 +121,11 @@ class MyAgent final : public thuai::Agent {
 
   void onSkillEffect(const thuai::SkillEffect& effect) override {
     spdlog::info("Skill effect: skill={} source={} target={} description={}",
-                 effect.skillName, effect.sourcePlayer,
-                 effect.targetPlayer.value_or("none"), effect.description);
+                 effect.skillName, effect.sourcePlayerId,
+                 effect.targetPlayerId.has_value()
+                     ? std::to_string(*effect.targetPlayerId)
+                     : "none",
+                 effect.description);
   }
 
   void onDaySettlement(const thuai::DaySettlement& settlement) override {

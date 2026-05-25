@@ -8,6 +8,7 @@ from typing import TypeAlias
 from unittest.mock import AsyncMock, patch
 
 from sdk_python.message import (
+    _optional_int,
     _optional_object,
     _optional_str,
     _require_bool,
@@ -142,6 +143,7 @@ class ProtocolParserTests(unittest.TestCase):
 
         state = parse_player_state(
             {
+                "playerId": 7,
                 "mora": 1200,
                 "frozenMora": 150,
                 "gold": 7,
@@ -169,6 +171,7 @@ class ProtocolParserTests(unittest.TestCase):
             }
         )
 
+        self.assertEqual(7, state.player_id)
         self.assertEqual(1200, state.mora)
         self.assertEqual(150, state.frozen_mora)
         self.assertEqual(14, state.monthly_trade_count)
@@ -221,14 +224,14 @@ class ProtocolParserTests(unittest.TestCase):
         effect = parse_skill_effect(
             {
                 "skillName": "Hedge",
-                "sourcePlayer": "alpha",
-                "targetPlayer": None,
+                "sourcePlayerId": 0,
+                "targetPlayerId": None,
                 "description": "Protected against one loss",
             }
         )
         self.assertEqual("Hedge", effect.skill_name)
-        self.assertEqual("alpha", effect.source_player)
-        self.assertIsNone(effect.target_player)
+        self.assertEqual(0, effect.source_player_id)
+        self.assertIsNone(effect.target_player_id)
 
         options = parse_strategy_options(
             {
@@ -312,6 +315,7 @@ class ProtocolParserTests(unittest.TestCase):
             (_require_bool, {"value": 1}, "value"),
             (_require_str, {"value": 1}, "value"),
             (_require_list, {"value": 1}, "value"),
+            (_optional_int, {"value": True}, "value"),
             (_optional_str, {"value": 1}, "value"),
             (_optional_object, {"value": 1}, "value"),
             (_require_str_list, {"value": [1]}, "value"),
@@ -420,6 +424,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
             json.dumps(
                 {
                     "messageType": "PLAYER_STATE",
+                    "playerId": 7,
                     "mora": 1200,
                     "frozenMora": 150,
                     "gold": 7,
@@ -489,8 +494,8 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "messageType": "SKILL_EFFECT",
                     "skillName": "Hedge",
-                    "sourcePlayer": "alpha",
-                    "targetPlayer": "beta",
+                    "sourcePlayerId": 0,
+                    "targetPlayerId": 1,
                     "description": "Protected against one loss",
                 }
             ),
@@ -653,7 +658,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
 
         await agent.activate_skill(
             "Freeze",
-            target_token="player-2",
+            target_player_id=1,
             variant="intense",
         )
 
@@ -663,7 +668,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
                     "messageType": "ACTIVATE_SKILL",
                     "token": "player-1",
                     "skillName": "Freeze",
-                    "targetToken": "player-2",
+                    "targetPlayerId": 1,
                     "variant": "intense",
                 }
             ],

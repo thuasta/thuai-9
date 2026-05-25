@@ -394,7 +394,8 @@ function handleSkill(event) {
   sendAction(activateSkillMessage(
     state.connection.token,
     String(data.get("skillName") || "").trim(),
-    data.get("direction"),
+    data.get("targetPlayerId"),
+    String(data.get("variant") || "").trim(),
   ));
 }
 
@@ -560,7 +561,10 @@ function actionDetail(message) {
     return String(message.cardName || "");
   }
   if (message.messageType === "ACTIVATE_SKILL") {
-    return `${message.skillName || ""} ${message.direction || ""}`.trim();
+    const parts = [message.skillName || ""];
+    if (message.targetPlayerId !== undefined) parts.push(`target=${message.targetPlayerId}`);
+    if (message.variant) parts.push(`variant=${message.variant}`);
+    return parts.join(" ").trim();
   }
   return message.messageType;
 }

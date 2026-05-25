@@ -62,14 +62,16 @@ class Agent {
   }
 
   void activateSkill(const std::string& skillName,
-                     const std::string& targetToken = "",
+                     const std::optional<int>& targetPlayerId = std::nullopt,
                      const std::string& variant = "") {
+    const std::string targetDescription = targetPlayerId.has_value()
+                                              ? std::to_string(*targetPlayerId)
+                                              : "none";
     spdlog::debug("Queueing skill activation name={} target={} variant={}",
-                  skillName, targetToken.empty() ? "none" : targetToken,
+                  skillName, targetDescription,
                   variant.empty() ? "none" : variant);
     send(protocol::buildActivateSkillMessage(
-        token_, skillName,
-        targetToken.empty() ? std::nullopt : std::make_optional(targetToken),
+        token_, skillName, targetPlayerId,
         variant.empty() ? std::nullopt : std::make_optional(variant)));
   }
 
@@ -180,10 +182,10 @@ class Agent {
       } else if (msgType == "PLAYER_STATE") {
         playerState = protocol::parsePlayerState(data);
         spdlog::debug(
-            "Parsed player state mora={} frozenMora={} gold={} frozenGold={} "
+            "Parsed player state playerId={} mora={} frozenMora={} gold={} frozenGold={} "
             "lockedGold={} nav={} pendingOrders={} activeCards={}",
-            playerState.mora, playerState.frozenMora, playerState.gold,
-            playerState.frozenGold, playerState.lockedGold, playerState.nav,
+            playerState.playerId, playerState.mora, playerState.frozenMora,
+            playerState.gold, playerState.frozenGold, playerState.lockedGold, playerState.nav,
             playerState.pendingOrders.size(), playerState.activeCards.size());
         onPlayerState(playerState);
       } else if (msgType == "NEWS_BROADCAST") {
@@ -219,8 +221,11 @@ class Agent {
         const auto effect = protocol::parseSkillEffect(data);
         spdlog::debug(
             "Parsed skill effect skill={} source={} target={} description={}",
-            effect.skillName, effect.sourcePlayer,
-            effect.targetPlayer.value_or("none"), effect.description);
+            effect.skillName, effect.sourcePlayerId,
+            effect.targetPlayerId.has_value()
+                ? std::to_string(*effect.targetPlayerId)
+                : "none",
+            effect.description);
         onSkillEffect(effect);
       } else if (msgType == "DAY_SETTLEMENT") {
         latestDaySettlement = protocol::parseDaySettlement(data);

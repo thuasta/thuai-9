@@ -70,6 +70,9 @@ public record PlayerStateMessage : Message
 {
     public override string MessageType => "PLAYER_STATE";
 
+    [JsonPropertyName("playerId")]
+    public int PlayerId { get; init; }
+
     [JsonPropertyName("mora")]
     public long Mora { get; init; }
 
@@ -242,11 +245,11 @@ public record SkillEffectMessage : Message
     [JsonPropertyName("skillName")]
     public string SkillName { get; init; } = "";
 
-    [JsonPropertyName("sourcePlayer")]
-    public string SourcePlayer { get; init; } = "";
+    [JsonPropertyName("sourcePlayerId")]
+    public int SourcePlayerId { get; init; }
 
-    [JsonPropertyName("targetPlayer")]
-    public string? TargetPlayer { get; init; }
+    [JsonPropertyName("targetPlayerId")]
+    public int? TargetPlayerId { get; init; }
 
     [JsonPropertyName("description")]
     public string Description { get; init; } = "";

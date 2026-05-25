@@ -157,8 +157,9 @@
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `skillName` | string | 是 | 技能名 |
-| `targetToken` | string | 否 | 当前用于 `网络风暴` 指定目标 |
+| `targetPlayerId` | number | 否 | 当前用于 `网络风暴` 指定公开目标玩家 |
 | `variant` | string | 否 | 当前用于 `内幕消息`，支持 `"cheap"` |
+| `targetToken` | string | 否 | 旧字段，仅兼容旧客户端，不建议新 Agent 使用 |
 
 已实现的主动技能参数约定：
 
@@ -166,7 +167,7 @@
 - `闪电交易`：无额外参数。
 - `止损名刀`：无额外参数。
 - `定向增发`：无额外参数。
-- `网络风暴`：需要 `targetToken`。
+- `网络风暴`：需要 `targetPlayerId`。
 - `舆情打击`：无额外参数。
 
 示例 1：网络风暴
@@ -176,7 +177,7 @@
   "messageType": "ACTIVATE_SKILL",
   "token": "player1",
   "skillName": "网络风暴",
-  "targetToken": "player2"
+  "targetPlayerId": 1
 }
 ```
 
@@ -257,6 +258,7 @@
 ```json
 {
   "messageType": "PLAYER_STATE",
+  "playerId": 0,
   "mora": 980000,
   "frozenMora": 20000,
   "gold": 1005,
@@ -288,6 +290,7 @@
 
 - `pendingOrders` 同时包含“尚未到达的延迟订单”和“已进入订单簿但未完全成交的订单”。
 - 订单尚未到达时，`intent` 可能为空；到达并处理后会变成 `Immediate` 或 `Resting`。
+- `playerId` 是当前 Agent 自己的公开玩家编号，可与 `GAME_STATE.scores[].playerId` 对照。
 - `monthlyTradeCount` 用于当月结算平局时的交易数比较。
 
 ### STRATEGY_OPTIONS
@@ -397,8 +400,8 @@
 {
   "messageType": "SKILL_EFFECT",
   "skillName": "网络风暴",
-  "sourcePlayer": "player1",
-  "targetPlayer": "player2",
+  "sourcePlayerId": 0,
+  "targetPlayerId": 1,
   "description": "next order delayed by 1 day"
 }
 ```
@@ -408,8 +411,8 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `skillName` | string | 技能名 |
-| `sourcePlayer` | string | 触发者 token |
-| `targetPlayer` | string/null | 目标 token，没有目标时省略 |
+| `sourcePlayerId` | number | 触发者公开玩家编号 |
+| `targetPlayerId` | number/null | 目标公开玩家编号，没有目标时省略 |
 | `description` | string | 服务端生成的效果描述 |
 
 ### DAY_SETTLEMENT

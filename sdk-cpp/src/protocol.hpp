@@ -65,13 +65,13 @@ inline auto buildSelectStrategyMessage(const std::string& token,
 
 inline auto buildActivateSkillMessage(
     const std::string& token, const std::string& skillName,
-    const std::optional<std::string>& targetToken = std::nullopt,
+    const std::optional<int>& targetPlayerId = std::nullopt,
     const std::optional<std::string>& variant = std::nullopt) -> json {
   json message = {{"messageType", "ACTIVATE_SKILL"},
                   {"token", token},
                   {"skillName", skillName}};
-  if (targetToken.has_value()) {
-    message["targetToken"] = *targetToken;
+  if (targetPlayerId.has_value()) {
+    message["targetPlayerId"] = *targetPlayerId;
   }
   if (variant.has_value()) {
     message["variant"] = *variant;
@@ -124,6 +124,7 @@ inline auto parseMarketState(const json& data) -> MarketState {
 
 inline auto parsePlayerState(const json& data) -> PlayerState {
   PlayerState state;
+  state.playerId = data.value("playerId", 0);
   state.mora = data.value("mora", std::int64_t{0});
   state.frozenMora = data.value("frozenMora", std::int64_t{0});
   state.gold = data.value("gold", 0);
@@ -220,9 +221,9 @@ inline auto parseTrade(const json& data) -> TradeNotification {
 inline auto parseSkillEffect(const json& data) -> SkillEffect {
   SkillEffect skillEffect;
   skillEffect.skillName = data.value("skillName", "");
-  skillEffect.sourcePlayer = data.value("sourcePlayer", "");
-  if (data.contains("targetPlayer") && !data["targetPlayer"].is_null()) {
-    skillEffect.targetPlayer = data.value("targetPlayer", std::string(""));
+  skillEffect.sourcePlayerId = data.value("sourcePlayerId", 0);
+  if (data.contains("targetPlayerId") && !data["targetPlayerId"].is_null()) {
+    skillEffect.targetPlayerId = data.value("targetPlayerId", 0);
   }
   skillEffect.description = data.value("description", "");
   return skillEffect;

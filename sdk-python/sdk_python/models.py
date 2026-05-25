@@ -91,6 +91,7 @@ class MarketState:
 class PlayerState:  # pylint: disable=too-many-instance-attributes
     """Private portfolio and quota snapshot for the current player."""
 
+    player_id: int = 0
     mora: int = 0
     frozen_mora: int = 0
     gold: int = 0
@@ -157,6 +158,6 @@ class SkillEffect:
     """Broadcast description of a resolved skill effect."""
 
     skill_name: str = ""
-    source_player: str = ""
-    target_player: Optional[str] = None
+    source_player_id: int = 0
+    target_player_id: Optional[int] = None
     description: str = ""

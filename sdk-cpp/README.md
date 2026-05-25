@@ -92,7 +92,7 @@ void limitSell(long price, int quantity);
 void cancelOrder(long orderId);
 void submitReport(int newsId, Prediction prediction);
 void selectStrategy(const std::string& cardName);
-void activateSkill(const std::string& skillName, const std::string& direction = "");
+void activateSkill(const std::string& skillName, std::optional<int> targetPlayerId = std::nullopt, const std::string& variant = "");
 ```
 
 #### Event Handlers (virtual, override what you need)
@@ -127,6 +127,7 @@ All structs are POD-style with default values. See `src/models.hpp`.
 
 ```cpp
 struct PlayerState {
+    int playerId = 0;       // your public player id
     long mora = 0;          // available
     long frozenMora = 0;    // locked in buy orders
     int gold = 0;           // available

@@ -241,10 +241,12 @@ export function applyMessage(state, message) {
       break;
 
     case "SKILL_EFFECT":
+      const sourcePlayer = message.sourcePlayerId !== undefined ? `source=${message.sourcePlayerId}` : "-";
+      const targetPlayer = message.targetPlayerId !== undefined ? ` target=${message.targetPlayerId}` : "";
       pushEvent(state, {
         kind: "skill",
         title: message.skillName || "技能触发",
-        detail: `${message.sourcePlayer || "-"} ${message.description || ""}`.trim(),
+        detail: `${sourcePlayer}${targetPlayer} ${message.description || ""}`.trim(),
       });
       break;
 
@@ -389,6 +391,7 @@ function appendMarketSnapshot(state) {
 
 function normalizePlayerState(message) {
   return {
+    playerId: numberOr(message.playerId, 0),
     mora: numberOr(message.mora, 0),
     frozenMora: numberOr(message.frozenMora, 0),
     gold: numberOr(message.gold, 0),
@@ -402,6 +405,7 @@ function normalizePlayerState(message) {
 
 function emptyPlayerState() {
   return {
+    playerId: 0,
     mora: 0,
     frozenMora: 0,
     gold: 0,

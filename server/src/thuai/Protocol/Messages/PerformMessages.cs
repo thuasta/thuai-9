@@ -69,6 +69,9 @@ public record ActivateSkillMessage : PerformMessage
     [JsonPropertyName("skillName")]
     public string SkillName { get; init; } = "";
 
+    [JsonPropertyName("targetPlayerId")]
+    public int? TargetPlayerId { get; init; }
+
     [JsonPropertyName("targetToken")]
     public string? TargetToken { get; init; }
 

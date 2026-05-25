@@ -130,8 +130,10 @@ class Agent:  # pylint: disable=too-many-instance-attributes
     async def activate_skill(
         self,
         skill_name: str,
-        target_token: Optional[str] = None,
+        target_player_id: Optional[int] = None,
         variant: Optional[str] = None,
+        *,
+        target_token: Optional[str] = None,
     ) -> None:
         """Activate a skill, optionally targeting a player or variant."""
 
@@ -140,6 +142,8 @@ class Agent:  # pylint: disable=too-many-instance-attributes
             "token": self.token,
             "skillName": skill_name,
         }
+        if target_player_id is not None:
+            msg["targetPlayerId"] = target_player_id
         if target_token:
             msg["targetToken"] = target_token
         if variant:
