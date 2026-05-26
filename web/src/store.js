@@ -17,6 +17,7 @@ const MAX_EVENTS = 160;
 const MAX_MARKET_HISTORY = 8000;
 const MAX_NEWS = 80;
 const VALID_VIEWS = new Set(["main", "logs", "rankings", "info", "debug", "server-debug"]);
+const AUTO_OPEN_SETTLEMENT_MODAL = false;
 
 export function routeFromLocation(location) {
   const search = new URLSearchParams(location.search);
@@ -52,6 +53,7 @@ export function createInitialState(route = {}) {
     },
     game: {
       stage: "",
+      currentMonth: 0,
       currentDay: 0,
       currentTick: 0,
       totalTicks: 0,
@@ -172,6 +174,7 @@ export function applyMessage(state, message) {
       state.game = {
         ...state.game,
         stage: message.stage || "",
+        currentMonth: numberOr(message.currentMonth, state.game.currentMonth),
         currentDay: numberOr(message.currentDay, 0),
         currentTick: numberOr(message.currentTick, 0),
         totalTicks: numberOr(message.totalTicks, 0),
@@ -251,7 +254,7 @@ export function applyMessage(state, message) {
     case "DAY_SETTLEMENT":
       state.settlement = { ...message };
       upsertDailySummary(state, message);
-      state.ui.showSettlement = true;
+      state.ui.showSettlement = AUTO_OPEN_SETTLEMENT_MODAL;
       pushEvent(state, {
         kind: "settlement",
         title: `第 ${message.day ?? state.game.currentDay} 日结算`,

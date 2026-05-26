@@ -10,6 +10,7 @@ export function buildSampleMessages(role = "observer") {
     {
       messageType: "GAME_STATE",
       stage: "TradingDay",
+      currentMonth: 1,
       currentDay: 1,
       currentTick: 260,
       totalTicks: 1,
@@ -49,6 +50,7 @@ export function buildSampleMessages(role = "observer") {
     messages.push({
       messageType: "GAME_STATE",
       stage: "TradingDay",
+      currentMonth: 1,
       currentDay: 1,
       currentTick: 260 + tick,
       totalTicks: tick,

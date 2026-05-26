@@ -7,6 +7,7 @@ const MARKET_CHART_MIN_ZOOM = 0.12;
 const MARKET_CHART_MAX_ZOOM = 32;
 const MARKET_CHART_ZOOM_SENSITIVITY = 0.0015;
 const MARKET_CHART_PAN_SENSITIVITY = 1;
+const DAILY_SUMMARY_PREVIEW_LIMIT = 12;
 
 const _prevPrices = {};
 const _prevBookPrices = {};
@@ -16,6 +17,7 @@ let _lastTickerSignature = "";
 const marketChartViewport = {
   zoom: 1,
   offset: 0,
+  autoFollow: true,
   dragging: false,
   dragStartX: 0,
   dragStartOffset: 0,
@@ -66,6 +68,7 @@ export function renderApp(state) {
 export function resetMarketChartViewport() {
   marketChartViewport.zoom = 1;
   marketChartViewport.offset = 0;
+  marketChartViewport.autoFollow = true;
   marketChartViewport.dragging = false;
   marketChartViewport.dragStartX = 0;
   marketChartViewport.dragStartOffset = 0;
@@ -73,6 +76,7 @@ export function resetMarketChartViewport() {
 
 export function handleMarketChartPointerDown(canvas, event, state) {
   if (!canvas || event.button !== 0) return false;
+  marketChartViewport.autoFollow = false;
   marketChartViewport.dragging = true;
   marketChartViewport.dragStartX = event.clientX;
   marketChartViewport.dragStartOffset = marketChartViewport.offset;
@@ -128,6 +132,7 @@ export function handleMarketChartWheel(canvas, event, state) {
       ? event.deltaY
       : event.deltaX;
     if (!Number.isFinite(delta) || delta === 0) return false;
+    marketChartViewport.autoFollow = false;
     marketChartViewport.offset = clamp(
       marketChartViewport.offset + (delta / layout.step) * MARKET_CHART_PAN_SENSITIVITY,
       0,
@@ -146,6 +151,7 @@ export function handleMarketChartWheel(canvas, event, state) {
   );
   const nextStep = layout.baseStep * nextZoom;
   marketChartViewport.zoom = nextZoom;
+  marketChartViewport.autoFollow = false;
   marketChartViewport.offset = clamp(anchorIndex - zoomPoint / nextStep, 0, layout.maxOffsetForStep(nextStep));
   event.preventDefault();
   return true;
@@ -391,6 +397,9 @@ function renderDailySummaries(state) {
   }
 
   node.innerHTML = state.dailySummaries
+    .slice()
+    .sort((a, b) => b.day - a.day)
+    .slice(0, DAILY_SUMMARY_PREVIEW_LIMIT)
     .map((summary) => `
       <article class="day-summary">
         <div class="day-summary-head">
@@ -635,15 +644,18 @@ export function drawMarketChart(canvas, state) {
 
   const margin = { top: 18, right: 58, bottom: 42, left: 44 };
   const chartHeight = height - margin.top - margin.bottom;
-  const volumeHeight = Math.max(54, chartHeight * 0.22);
-  const priceHeight = chartHeight - volumeHeight - 12;
+  const volumeHeight = Math.max(68, chartHeight * 0.28);
+  const priceHeight = chartHeight - volumeHeight - 16;
   const plotWidth = width - margin.left - margin.right;
   const baseStep = getBaseStep(state.market.interval);
   const step = baseStep * marketChartViewport.zoom;
   const visibleCount = plotWidth / step;
   const maxOffset = Math.max(0, candles.length - visibleCount);
+  if (marketChartViewport.autoFollow) {
+    marketChartViewport.offset = maxOffset;
+  }
   marketChartViewport.offset = clamp(marketChartViewport.offset, 0, maxOffset);
-  const candleWidth = Math.max(2, Math.min(14, step * 0.58));
+  const candleWidth = Math.max(3, Math.min(18, step * 0.64));
   const firstIndex = Math.max(0, Math.floor(marketChartViewport.offset) - 1);
   const lastIndex = Math.min(candles.length - 1, Math.ceil(marketChartViewport.offset + visibleCount) + 1);
   const visibleCandles = candles.slice(firstIndex, lastIndex + 1);
@@ -685,11 +697,12 @@ export function drawMarketChart(canvas, state) {
     ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
     ctx.shadowBlur = 0;
 
-    const volumeTop = margin.top + priceHeight + 12;
-    const barHeight = (candle.volume / maxVolume) * volumeHeight;
+    const volumeTop = margin.top + priceHeight + 16;
+    const rawBarHeight = (candle.volume / maxVolume) * volumeHeight;
+    const barHeight = candle.volume > 0 ? Math.max(2, rawBarHeight) : 0;
     ctx.shadowBlur = 3;
     ctx.shadowColor = color;
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.68;
     ctx.fillRect(x - candleWidth / 2, volumeTop + volumeHeight - barHeight, candleWidth, barHeight);
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
@@ -701,7 +714,8 @@ export function drawMarketChart(canvas, state) {
   ctx.font = "11px 'JetBrains Mono', monospace";
   ctx.fillText(`${Math.round(priceMax)}`, width - margin.right + 10, margin.top + 6);
   ctx.fillText(`${Math.round(priceMin)}`, width - margin.right + 10, margin.top + priceHeight);
-  ctx.fillText(`D${firstVisible.day} T${firstVisible.bucketStartTick} - T${lastVisible.bucketEndTick}`, margin.left, height - 14);
+  ctx.fillText(`VOL ${formatCompactNumber(maxVolume)}`, width - margin.right + 10, margin.top + priceHeight + 28);
+  ctx.fillText(formatCandleRange(firstVisible, lastVisible), margin.left, height - 14);
 }
 
 function drawGrid(ctx, margin, width, height, priceHeight, priceMin, priceMax) {
@@ -713,6 +727,8 @@ function drawGrid(ctx, margin, width, height, priceHeight, priceMin, priceMax) {
     ctx.moveTo(margin.left, y);
     ctx.lineTo(width - margin.right, y);
   }
+  ctx.moveTo(margin.left, margin.top + priceHeight + 8);
+  ctx.lineTo(width - margin.right, margin.top + priceHeight + 8);
   ctx.moveTo(margin.left, height - margin.bottom);
   ctx.lineTo(width - margin.right, height - margin.bottom);
   ctx.stroke();
@@ -721,6 +737,7 @@ function drawGrid(ctx, margin, width, height, priceHeight, priceMin, priceMax) {
   ctx.font = "11px 'JetBrains Mono', monospace";
   ctx.fillText("OHLC", margin.left, margin.top - 4);
   ctx.fillText(`${Math.round((priceMin + priceMax) / 2)}`, width - margin.right + 10, margin.top + priceHeight / 2);
+  ctx.fillText("VOL", margin.left, margin.top + priceHeight + 24);
 }
 
 function getMarketChartLayout(canvas, state) {
@@ -747,8 +764,27 @@ function getMarketChartLayout(canvas, state) {
 }
 
 function getBaseStep(interval) {
-  const normalized = Number(interval) || 20;
-  return Math.max(4, 8 + (normalized - 20) * 0.18);
+  const normalized = Number(interval) || 10;
+  if (normalized <= 1) return 8;
+  if (normalized <= 5) return 10;
+  return Math.max(8, 10 + (normalized - 10) * 0.14);
+}
+
+function formatCandleRange(firstVisible, lastVisible) {
+  const firstSession = firstVisible.session;
+  const lastSession = lastVisible.session;
+  const firstDay = firstVisible.startDay ?? firstVisible.day;
+  const lastDay = lastVisible.endDay ?? lastVisible.day;
+  const firstTick = firstVisible.bucketStartTick;
+  const lastTick = lastVisible.lastTick ?? lastVisible.bucketEndTick;
+  const hasSession = Number(firstSession) > 0 && Number(lastSession) > 0;
+  const sessionPrefix = firstSession === lastSession
+    ? `M${firstSession}`
+    : `M${firstSession}-M${lastSession}`;
+  const dayLabel = firstDay === lastDay ? `D${firstDay}` : `D${firstDay}-D${lastDay}`;
+  return hasSession
+    ? `${sessionPrefix} ${dayLabel} T${firstTick} - T${lastTick}`
+    : `${dayLabel} T${firstTick} - T${lastTick}`;
 }
 
 function statCell(label, value) {
@@ -802,6 +838,15 @@ function formatNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number === 0) return number === 0 ? "0" : "-";
   return new Intl.NumberFormat("en-US").format(number);
+}
+
+function formatCompactNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return number === 0 ? "0" : "-";
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(number);
 }
 
 function escapeHtml(value) {

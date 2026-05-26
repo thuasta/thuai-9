@@ -156,7 +156,7 @@ Player 首期保留人工调试入口：
 建议前端 store 分为：
 
 - `connection`：WebSocket 状态、role、token、server、重连次数。
-- `game`：`stage`、`currentDay`、`currentTick`、`dayTick`、`dayTickLimit`、`scores`。
+- `game`：`stage`、`currentMonth`、`currentDay`、`currentTick`、`dayTick`、`dayTickLimit`、`scores`。
 - `market`：最新 `MARKET_STATE`、盘口、K 线、成交量 baseline。
 - `players`：Player 私有 `PLAYER_STATE`，Observer 公共 `PLAYER_SUMMARY_STATE`。
 - `strategy`：`STRATEGY_OPTIONS`、已选/已激活卡、技能状态。
@@ -218,14 +218,14 @@ type Candle = {
 规则：
 
 1. 默认价格口径为 `midPrice`，可切换 `lastPrice`。
-2. 默认 20 Tick 一根 K 线，可切换 10 / 20 / 50 / 100 Tick。
-3. 交易日取 `GAME_STATE.currentDay`。
+2. 默认 10 Tick 一根 K 线，可切换 1 / 5 / 10 / 20 / 50 / 100 Tick；当服务端采用 1 Tick 代表 1 天时，前端仍按连续 Tick 聚合，避免每个 `currentDay` 都被拆成孤立点。
+3. 交易轮次优先取 `GAME_STATE.currentMonth`，用于识别跨轮重置；K 线显示区间仍展示 `GAME_STATE.currentDay`。
 4. 日内 Tick 取 `MARKET_STATE.tick`。
 5. `bucket = floor((tick - 1) / interval)`。
 6. 新桶第一条：`open = high = low = close = price`。
 7. 同桶更新：`high = max(high, price)`、`low = min(low, price)`、`close = price`。
-8. `MARKET_STATE.volume` 是当日累计成交量，柱图使用差分 `max(0, currentVolume - previousVolume)`。
-9. 跨日、Tick 回退、断线重连后的第一条 snapshot 只重置 volume baseline，不计入 delta。
+8. `MARKET_STATE.volume` 是当前交易轮次内的累计成交量，柱图使用连续差分 `max(0, currentVolume - previousVolume)`。
+9. 跨交易轮次或明确 Tick 回退时开启新序列；若服务端在新序列第一条 snapshot 已包含成交量，该成交量计入新序列第一根柱。
 10. 非 `TradingDay` 阶段不生成 candle。
 
 ## 公共与私有边界

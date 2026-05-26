@@ -3,7 +3,10 @@ import { createCandleAccumulator, ingestMarketSnapshot, rebuildCandles } from ".
 
 testSameBucketOhlc();
 testVolumeDelta();
-testCrossDayBaseline();
+testCrossDayOpeningVolume();
+testTickBucketsAcrossFastDays();
+testNewSessionCountsOpeningVolume();
+testSingleTickCandlesUsePreviousClose();
 testRebuildWithIntervals();
 
 function testSameBucketOhlc() {
@@ -30,7 +33,7 @@ function testVolumeDelta() {
   assert.equal(acc.candles[0].volume, 9);
 }
 
-function testCrossDayBaseline() {
+function testCrossDayOpeningVolume() {
   const acc = createCandleAccumulator({ interval: 20 });
   ingestMarketSnapshot(acc, snapshot(1, 1, 100, 10));
   ingestMarketSnapshot(acc, snapshot(1, 2, 101, 15));
@@ -39,7 +42,42 @@ function testCrossDayBaseline() {
 
   assert.equal(acc.candles.length, 2);
   assert.equal(acc.candles[0].volume, 5);
-  assert.equal(acc.candles[1].volume, 4);
+  assert.equal(acc.candles[1].volume, 54);
+}
+
+function testTickBucketsAcrossFastDays() {
+  const acc = createCandleAccumulator({ interval: 10 });
+  ingestMarketSnapshot(acc, snapshot(1, 1, 100, 10));
+  ingestMarketSnapshot(acc, snapshot(2, 2, 101, 14));
+  ingestMarketSnapshot(acc, snapshot(3, 3, 102, 19));
+
+  assert.equal(acc.candles.length, 1);
+  assert.equal(acc.candles[0].startDay, 1);
+  assert.equal(acc.candles[0].endDay, 3);
+  assert.equal(acc.candles[0].volume, 9);
+}
+
+function testNewSessionCountsOpeningVolume() {
+  const acc = createCandleAccumulator({ interval: 10 });
+  ingestMarketSnapshot(acc, snapshot(1, 1, 100, 10, { currentMonth: 1 }));
+  ingestMarketSnapshot(acc, snapshot(2, 2, 101, 14, { currentMonth: 1 }));
+  ingestMarketSnapshot(acc, snapshot(1, 1, 103, 7, { currentMonth: 2 }));
+
+  assert.equal(acc.candles.length, 2);
+  assert.equal(acc.candles[0].volume, 4);
+  assert.equal(acc.candles[1].volume, 7);
+}
+
+function testSingleTickCandlesUsePreviousClose() {
+  const acc = createCandleAccumulator({ interval: 1 });
+  ingestMarketSnapshot(acc, snapshot(1, 1, 100, 1));
+  ingestMarketSnapshot(acc, snapshot(2, 2, 106, 2));
+
+  assert.equal(acc.candles.length, 2);
+  assert.equal(acc.candles[1].open, 100);
+  assert.equal(acc.candles[1].close, 106);
+  assert.equal(acc.candles[1].low, 100);
+  assert.equal(acc.candles[1].high, 106);
 }
 
 function testRebuildWithIntervals() {
@@ -54,10 +92,11 @@ function testRebuildWithIntervals() {
   assert.equal(candles[1].bucketStartTick, 11);
 }
 
-function snapshot(day, tick, midPrice, volume) {
+function snapshot(day, tick, midPrice, volume, options = {}) {
   return {
     game: {
       stage: "TradingDay",
+      currentMonth: options.currentMonth,
       currentDay: day,
     },
     market: {
