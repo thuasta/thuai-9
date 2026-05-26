@@ -7,7 +7,7 @@
     "test": "node tests/run.mjs"
   },
   "dependencies": {
-    "express": "^4.22.1",
+    "express": "^4.22.2",
     "jszip": "^3.10.1"
   }
 }
