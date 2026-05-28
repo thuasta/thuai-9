@@ -767,7 +767,10 @@ public class GameCoverageTests
         Assert.True(game.HasPendingSettlementNotification);
         Assert.NotNull(game.LatestSettlement);
         Assert.Equal("alpha", game.LatestSettlement!.WinnerToken);
-        Assert.Equal(1, game.Scoreboard["alpha"]);
+        // Scoreboard now stores cumulative net income, not per-round points; with
+        // no actual trades happening either player's net income is zero.
+        Assert.Equal(0, game.Scoreboard["alpha"]);
+        Assert.Equal(0, game.Scoreboard["beta"]);
 
         game.MarkSettlementNotificationPublished();
         Assert.False(game.HasPendingSettlementNotification);

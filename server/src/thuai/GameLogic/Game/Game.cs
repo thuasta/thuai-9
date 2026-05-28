@@ -245,8 +245,6 @@ public partial class Game
     {
         string winnerToken = "";
         string reason = "tie";
-        string finalBonusWinnerToken = "";
-        int finalBonusPoints = 0;
 
         var orderedByNav = navs
             .OrderByDescending(entry => entry.Value)
@@ -280,22 +278,29 @@ public partial class Game
             reason = "only player";
         }
 
-        if (!string.IsNullOrEmpty(winnerToken))
+        // Final ranking is based on cumulative net income (累计净收入) across
+        // every month played, not on per-month win counts. Each month begins
+        // with the same baseline NAV (initial mora + initial gold @ initial
+        // price); CumulativeNavs sums the end-of-month NAVs, so subtracting
+        // the baseline-per-month yields net income.
+        long baselinePerMonth = _settings.InitialMora
+            + (long)_settings.InitialGold * _settings.InitialGoldPrice;
+        foreach (var (token, cumulative) in CumulativeNavs)
         {
-            Scoreboard[winnerToken] = Scoreboard.GetValueOrDefault(winnerToken, 0) + 1;
+            long netIncome = cumulative - baselinePerMonth * CurrentMonthNumber;
+            Scoreboard[token] = (int)Math.Clamp(netIncome, int.MinValue, int.MaxValue);
         }
 
+        // The "final bonus" winner is reported for the settlement display only;
+        // no extra points are awarded — ranking is already encoded in Scoreboard.
+        string finalBonusWinnerToken = "";
         if (!_settings.InfiniteMode && CurrentMonthNumber == _settings.TradingDayCount)
         {
-            var cumulativeOrdered = CumulativeNavs
+            var ranked = CumulativeNavs
                 .OrderByDescending(entry => entry.Value)
                 .ToList();
-            if (cumulativeOrdered.Count >= 2 && cumulativeOrdered[0].Value > cumulativeOrdered[1].Value)
-            {
-                finalBonusWinnerToken = cumulativeOrdered[0].Key;
-                finalBonusPoints = 2;
-                Scoreboard[finalBonusWinnerToken] = Scoreboard.GetValueOrDefault(finalBonusWinnerToken, 0) + 2;
-            }
+            if (ranked.Count >= 1)
+                finalBonusWinnerToken = ranked[0].Key;
         }
 
         return new MonthSettlementResult(
@@ -305,6 +310,6 @@ public partial class Game
             winnerToken,
             reason,
             finalBonusWinnerToken,
-            finalBonusPoints);
+            FinalBonusPoints: 0);
     }
 }
