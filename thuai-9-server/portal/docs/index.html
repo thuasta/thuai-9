@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>THUAI 9 文档</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">THUAI 9</p>
+        <h1>文档</h1>
+      </div>
+      <nav class="top-actions">
+        <a href="/">比赛平台</a>
+        <a href="/spectator/?server=nginx" target="_blank" rel="noreferrer">公开观战台</a>
+      </nav>
+    </header>
+
+    <main class="layout docs-layout">
+      <section class="panel docs-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Quick Start</p>
+            <h2>参赛流程</h2>
+          </div>
+        </div>
+        <ol class="doc-list">
+          <li>在比赛平台注册队伍或登录已有队伍账号。</li>
+          <li>准备代码压缩包。Python 提交需要包含 <code>main.py</code>，C++ 提交需要包含可构建的工程文件。</li>
+          <li>在“提交代码”区域选择语言并上传 <code>.zip</code> 文件，单个文件最大 10 MB。</li>
+          <li>等待评测 worker 编译并安排对局，结果会进入排行榜。</li>
+          <li>通过公开观战台查看实时游戏状态；观战台默认连接当前网页的 <code>/ws/game</code>。</li>
+        </ol>
+      </section>
+
+      <section class="panel docs-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Submission</p>
+            <h2>提交约束</h2>
+          </div>
+        </div>
+        <div class="doc-grid">
+          <div>
+            <h3>Python</h3>
+            <p>压缩包内必须包含 <code>main.py</code>，允许 <code>.py</code>、<code>.txt</code>、<code>.json</code>、<code>.yaml</code>、<code>.yml</code>、<code>.toml</code>、<code>.md</code> 文件。</p>
+          </div>
+          <div>
+            <h3>C++</h3>
+            <p>上传 <code>.zip</code> 压缩包。评测环境会在隔离容器中编译并运行提交产物。</p>
+          </div>
+          <div>
+            <h3>安全限制</h3>
+            <p>平台会拒绝非法路径、符号链接、超过 10 MB 的上传文件，以及解压后超过 50 MB 的压缩包。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel docs-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Endpoints</p>
+            <h2>服务入口</h2>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>路径</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>/</code></td>
+                <td>比赛平台首页、登录注册、提交代码和排行榜。</td>
+              </tr>
+              <tr>
+                <td><code>/docs/</code></td>
+                <td>当前文档页。</td>
+              </tr>
+              <tr>
+                <td><code>/api/</code></td>
+                <td>提交系统 API，由 nginx 反代到 FastAPI。</td>
+              </tr>
+              <tr>
+                <td><code>/spectator/</code></td>
+                <td>公开观战台。</td>
+              </tr>
+              <tr>
+                <td><code>/ws/game</code></td>
+                <td>观战台 WebSocket，由 nginx 反代到游戏服务器。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

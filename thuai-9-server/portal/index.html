@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>THUAI 9 比赛平台</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">THUAI 9</p>
+        <h1>比赛平台</h1>
+      </div>
+      <nav class="top-actions">
+        <a href="/docs/">文档</a>
+        <a href="/spectator/?server=nginx" target="_blank" rel="noreferrer">公开观战台</a>
+        <button id="refreshLeaderboard" type="button">刷新榜单</button>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="panel auth-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Team</p>
+            <h2>队伍登录</h2>
+          </div>
+          <div class="tabs" role="tablist" aria-label="登录或注册">
+            <button class="tab is-active" type="button" data-auth-tab="login">登录</button>
+            <button class="tab" type="button" data-auth-tab="register">注册</button>
+          </div>
+        </div>
+
+        <form id="authForm" class="stack">
+          <label id="teamNameField" class="field is-hidden">
+            <span>队伍名称</span>
+            <input name="name" type="text" minlength="2" maxlength="64" autocomplete="organization">
+          </label>
+          <label class="field">
+            <span>邮箱</span>
+            <input name="email" type="email" required autocomplete="email" placeholder="team@example.com">
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input name="password" type="password" required minlength="8" autocomplete="current-password">
+          </label>
+          <button id="authSubmit" class="primary" type="submit">登录</button>
+          <p id="authStatus" class="status" role="status"></p>
+        </form>
+
+        <div id="sessionPanel" class="session-panel is-hidden">
+          <div>
+            <span>游戏 Token</span>
+            <code id="gameToken">-</code>
+          </div>
+          <button id="logoutButton" type="button">退出登录</button>
+        </div>
+      </section>
+
+      <section class="panel upload-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Submission</p>
+            <h2>提交代码</h2>
+          </div>
+        </div>
+
+        <form id="uploadForm" class="stack">
+          <label class="field">
+            <span>语言</span>
+            <select name="language">
+              <option value="python">Python</option>
+              <option value="cpp">C++</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>代码压缩包</span>
+            <input name="file" type="file" accept=".zip" required>
+          </label>
+          <button class="primary" type="submit">上传</button>
+          <p id="uploadStatus" class="status" role="status"></p>
+        </form>
+
+        <div class="submissions">
+          <div class="section-title">
+            <h3>最近提交</h3>
+            <button id="refreshSubmissions" type="button">刷新</button>
+          </div>
+          <div id="submissionsList" class="empty">登录后显示提交记录。</div>
+        </div>
+      </section>
+
+      <section class="panel leaderboard-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Leaderboard</p>
+            <h2>排行榜</h2>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>队伍</th>
+                <th>总分</th>
+                <th>场均</th>
+                <th>最高分</th>
+                <th>场次</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody">
+              <tr><td colspan="6">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

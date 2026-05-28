@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: thuai9-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: thuai9
+      POSTGRES_USER: thuai9
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thuai9"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  submission-api:
+    build: ./submission-api
+    container_name: thuai9-submission-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://thuai9:${POSTGRES_PASSWORD}@postgres/thuai9
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      UPLOAD_DIR: ${PWD}/submission-data/uploads
+      ARTIFACT_DIR: ${PWD}/submission-data/artifacts
+    volumes:
+      - ${PWD}/submission-data:${PWD}/submission-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  evaluator:
+    build: ./evaluator
+    container_name: thuai9-evaluator
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://thuai9:${POSTGRES_PASSWORD}@postgres/thuai9
+      ARTIFACT_DIR: ${PWD}/submission-data/artifacts
+      UPLOAD_DIR: ${PWD}/submission-data/uploads
+      MATCH_DATA_DIR: ${PWD}/matches
+      GAME_CONFIG_DIR: ${PWD}/config
+      LIVE_SERVER_IMAGE: ghcr.io/thuasta/thuai-9-server:latest
+      LIVE_SERVER_CONTAINER: thuai9-live-server
+      LIVE_SERVER_URL: ws://thuai9-live-server:14514
+      LIVE_SERVER_NETWORK: thuai-9-server_internal
+      LIVE_SERVER_DATA_DIR: ${PWD}/data
+      RESTART_LIVE_SERVER: "true"
+    volumes:
+      - ${PWD}/submission-data:${PWD}/submission-data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PWD}/matches:${PWD}/matches
+      - ${PWD}/config:${PWD}/config:ro
+      - ${PWD}/data:${PWD}/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  web-spectator:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: thuai9-web-spectator
+    restart: unless-stopped
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: thuai9-nginx
+    restart: unless-stopped
+    ports:
+      - "14514:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./portal:/usr/share/nginx/html:ro
+    networks:
+      - internal
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    driver: bridge

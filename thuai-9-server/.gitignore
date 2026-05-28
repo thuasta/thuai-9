@@ -1,0 +1,6 @@
+.env
+/tmp/matches/
+data
+config
+
+__pycache__

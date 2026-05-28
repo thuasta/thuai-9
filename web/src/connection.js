@@ -1,6 +1,13 @@
 export const DEFAULT_LOCALHOST_PORT = "14514";
-export const DEFAULT_SERVER_URL = `ws://localhost:${DEFAULT_LOCALHOST_PORT}`;
 export const REMOTE_SERVER_URL = "ws://59.66.135.18:14514";
+const currentLocation = globalThis.location || { host: "localhost", pathname: "/", port: "" };
+export const NGINX_PROXY_URL = `ws://${currentLocation.host}/ws/game`;
+export const DEFAULT_LOCALHOST_URL = `ws://localhost:${DEFAULT_LOCALHOST_PORT}`;
+export const DEFAULT_SERVER_URL = isLikelyNginxHosted() ? NGINX_PROXY_URL : DEFAULT_LOCALHOST_URL;
+
+function isLikelyNginxHosted() {
+  return currentLocation.pathname.startsWith("/spectator/") && currentLocation.port !== "5173";
+}
 
 export function normalizeLocalhostPort(rawValue) {
   const value = String(rawValue || "").trim();
@@ -26,6 +33,10 @@ export function parseServerChoice(rawValue) {
     return { mode: "remote", localhostPort: DEFAULT_LOCALHOST_PORT };
   }
 
+  if (value === "nginx" || value === NGINX_PROXY_URL || value.endsWith("/ws/game")) {
+    return { mode: "nginx", localhostPort: DEFAULT_LOCALHOST_PORT };
+  }
+
   const localhostMatch = value.match(/^(?:ws:\/\/)?localhost:(\d+)$/i);
   if (localhostMatch) {
     return {
@@ -47,6 +58,10 @@ export function parseServerChoice(rawValue) {
 export function buildServerUrl(mode, localhostPort) {
   if (mode === "remote") {
     return REMOTE_SERVER_URL;
+  }
+
+  if (mode === "nginx") {
+    return NGINX_PROXY_URL;
   }
 
   return `ws://localhost:${normalizeLocalhostPort(localhostPort)}`;

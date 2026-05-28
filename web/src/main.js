@@ -32,7 +32,7 @@ import {
   setMode,
   setReplayPatch,
 } from "./store.js";
-import { buildServerUrl, normalizeLocalhostPort, openWebSocket } from "./connection.js";
+import { buildServerUrl, normalizeLocalhostPort, openWebSocket, parseServerChoice } from "./connection.js";
 import {
   handleMarketChartPointerDown,
   handleMarketChartPointerMove,
@@ -58,6 +58,11 @@ initParticles();
 bindControls();
 bindMarketChartControls();
 renderApp(state);
+if (isPublicSpectatorPage()) {
+  setMode(state, "observer");
+  setConnectionPatch(state, { server: buildServerUrl("nginx", state.connection.localhostPort) });
+  connect();
+}
 
 function bindControls() {
   document.getElementById("modeTabs")?.addEventListener("click", (event) => {
@@ -246,9 +251,18 @@ function handleSummaryInteraction(event) {
 }
 
 function currentServerMode() {
-  return document.getElementById("serverPresetSelect")?.value === "remote"
-    ? "remote"
-    : "localhost";
+  const value = document.getElementById("serverPresetSelect")?.value;
+  if (value === "remote" || value === "nginx") {
+    return value;
+  }
+  if (value === "localhost") {
+    return "localhost";
+  }
+  return parseServerChoice(state.connection.server).mode;
+}
+
+function isPublicSpectatorPage() {
+  return window.location.pathname.startsWith("/spectator/");
 }
 
 function connect() {
