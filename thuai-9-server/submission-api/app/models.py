@@ -58,3 +58,17 @@ class MatchParticipant(Base):
     team_id: Mapped[int] = mapped_column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
     player_token: Mapped[str] = mapped_column(String(64), nullable=False)
     score: Mapped[int | None] = mapped_column(Integer)
+
+
+class SubmissionMatchLog(Base):
+    """Per-match agent container stdout/stderr, captured by the evaluator after
+    every run regardless of outcome. Visible only to the owning team."""
+
+    __tablename__ = "submission_match_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[int] = mapped_column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
+    submission_id: Mapped[int] = mapped_column(Integer, ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False)
+    team_id: Mapped[int] = mapped_column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    log: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
