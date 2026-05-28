@@ -63,6 +63,16 @@ class MatchParticipant(Base):
     score = Column(Integer)
 
 
+class SubmissionMatchLog(Base):
+    __tablename__ = "submission_match_logs"
+    id = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
+    submission_id = Column(Integer, ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False)
+    team_id = Column(Integer, nullable=False)
+    log = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 os.makedirs(settings.artifact_dir, exist_ok=True)
 os.makedirs(settings.upload_dir, exist_ok=True)
 os.makedirs(settings.match_data_dir, exist_ok=True)
@@ -241,7 +251,7 @@ async def match_runner_loop():
                             ),
                         ]
 
-                    scores, error_log = await asyncio.get_running_loop().run_in_executor(
+                    scores, error_log, agent_logs = await asyncio.get_running_loop().run_in_executor(
                         None,
                         run_match,
                         match.id,
@@ -257,6 +267,18 @@ async def match_runner_loop():
                                 .where(MatchParticipant.id == row.id)
                                 .values(score=scores.get(row.submission_id))
                             )
+
+                    # Persist per-agent container output for every participant
+                    # whose container we successfully spawned, win or lose.
+                    # The owning team will be able to fetch this from the API.
+                    for agent in agents:
+                        log_text = agent_logs.get(agent.submission_id, "")
+                        db.add(SubmissionMatchLog(
+                            match_id=match.id,
+                            submission_id=agent.submission_id,
+                            team_id=agent.team_id,
+                            log=log_text,
+                        ))
 
                     await db.execute(
                         update(Match)

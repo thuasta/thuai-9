@@ -17,6 +17,7 @@ import { buildSampleMessages } from "./sample-data.js";
 import { buildReplaySession } from "./replay.js";
 import {
   applyMessage,
+  applyPlayerMap,
   clearSettlement,
   createInitialState,
   markNewsAsRead,
@@ -62,6 +63,7 @@ if (isPublicSpectatorPage()) {
   setMode(state, "observer");
   setConnectionPatch(state, { server: buildServerUrl("nginx", state.connection.localhostPort) });
   connect();
+  startPlayerMapPolling();
 }
 
 function bindControls() {
@@ -263,6 +265,27 @@ function currentServerMode() {
 
 function isPublicSpectatorPage() {
   return window.location.pathname.startsWith("/spectator/");
+}
+
+const PLAYER_MAP_POLL_MS = 15000;
+let playerMapTimer = null;
+
+async function fetchPlayerMap() {
+  try {
+    const res = await fetch("/api/matches/current/player-map", { credentials: "omit" });
+    if (!res.ok) return;
+    const data = await res.json();
+    applyPlayerMap(state, Array.isArray(data?.players) ? data.players : []);
+    renderApp(state);
+  } catch {
+    // Silent — the spectator UI still works with token-based labels if the API is down.
+  }
+}
+
+function startPlayerMapPolling() {
+  if (playerMapTimer) return;
+  fetchPlayerMap();
+  playerMapTimer = window.setInterval(fetchPlayerMap, PLAYER_MAP_POLL_MS);
 }
 
 function connect() {

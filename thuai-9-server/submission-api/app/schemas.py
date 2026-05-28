@@ -91,3 +91,32 @@ class LeaderboardEntry(BaseModel):
     average_score: float
     best_score: int | None
     total_matches: int
+
+
+class SubmissionMatchLogEntry(BaseModel):
+    match_id: int
+    status: str
+    score: int | None
+    scheduled_at: datetime
+    finished_at: datetime | None
+    log: str
+
+
+class SubmissionLogsOut(BaseModel):
+    submission_id: int
+    status: str
+    compile_log: str | None
+    matches: list[SubmissionMatchLogEntry]
+
+
+class PlayerMapEntry(BaseModel):
+    player_token: str
+    submission_id: int
+    team_id: int
+    team_name: str
+
+
+class PlayerMapOut(BaseModel):
+    match_id: int | None
+    status: str | None
+    players: list[PlayerMapEntry]

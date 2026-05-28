@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_team
-from app.models import Submission, Team
-from app.schemas import SubmissionOut
+from app.models import Match, MatchParticipant, Submission, SubmissionMatchLog, Team
+from app.schemas import SubmissionLogsOut, SubmissionMatchLogEntry, SubmissionOut
 
 router = APIRouter()
 
@@ -102,3 +102,57 @@ async def list_submissions(
         .limit(20)
     )
     return result.scalars().all()
+
+
+@router.get("/{submission_id}/logs", response_model=SubmissionLogsOut)
+async def get_submission_logs(
+    submission_id: int,
+    team: Team = Depends(get_current_team),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return compile output + the per-match agent stdout/stderr captured for
+    every match this submission has participated in. Only the owning team may
+    view its own logs."""
+    sub_result = await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )
+    submission = sub_result.scalar_one_or_none()
+    if submission is None:
+        raise HTTPException(status_code=404, detail="提交不存在")
+    if submission.team_id != team.id:
+        # 404 instead of 403 so the existence of other teams' submissions stays
+        # opaque to anyone scanning IDs.
+        raise HTTPException(status_code=404, detail="提交不存在")
+
+    log_result = await db.execute(
+        select(SubmissionMatchLog, Match, MatchParticipant)
+        .join(Match, Match.id == SubmissionMatchLog.match_id)
+        .join(
+            MatchParticipant,
+            (MatchParticipant.match_id == SubmissionMatchLog.match_id)
+            & (MatchParticipant.submission_id == SubmissionMatchLog.submission_id),
+            isouter=True,
+        )
+        .where(SubmissionMatchLog.submission_id == submission_id)
+        .order_by(SubmissionMatchLog.created_at.desc())
+        .limit(50)
+    )
+
+    matches = [
+        SubmissionMatchLogEntry(
+            match_id=match.id,
+            status=match.status,
+            score=participant.score if participant is not None else None,
+            scheduled_at=match.scheduled_at,
+            finished_at=match.finished_at,
+            log=log_row.log or "",
+        )
+        for log_row, match, participant in log_result.all()
+    ]
+
+    return SubmissionLogsOut(
+        submission_id=submission.id,
+        status=submission.status,
+        compile_log=submission.error_log,
+        matches=matches,
+    )

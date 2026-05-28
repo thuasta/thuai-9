@@ -585,7 +585,22 @@ function emptyPlayerDirectory() {
   return {
     labelsById: {},
     idsByToken: {},
+    teamNameByToken: {},
   };
+}
+
+export function applyPlayerMap(state, entries) {
+  if (!Array.isArray(entries)) return;
+  for (const entry of entries) {
+    const token = String(entry.player_token || "").trim();
+    const teamName = String(entry.team_name || "").trim();
+    if (!token || !teamName) continue;
+    state.playerDirectory.teamNameByToken[token] = teamName;
+    const knownId = state.playerDirectory.idsByToken[token];
+    if (typeof knownId === "number" && knownId >= 0) {
+      state.playerDirectory.labelsById[knownId] = teamName;
+    }
+  }
 }
 
 function normalizeScores(scores) {
@@ -601,8 +616,12 @@ function registerPlayerIdentity(state, playerId, token) {
   const id = numberOr(playerId, -1);
   const label = String(token || "").trim();
   if (id < 0 || !label) return;
-  state.playerDirectory.labelsById[id] = label;
   state.playerDirectory.idsByToken[label] = id;
+  // Prefer the team name from the platform mapping if available; otherwise
+  // fall back to the in-game token so the existing identity flow still works
+  // (used by player + admin views via playerDisplayName).
+  const teamName = state.playerDirectory.teamNameByToken[label];
+  state.playerDirectory.labelsById[id] = teamName || label;
 }
 
 function actorFromMessage(state, message) {
@@ -627,15 +646,28 @@ function numberOr(value, fallback) {
 
 export function playerDisplayName(state, playerId, token = "") {
   const tokenLabel = String(token || "").trim();
-  if (tokenLabel && tokenLabel !== "SYSTEM" && (state.replay.enabled || state.connection.role !== "observer")) {
-    return tokenLabel;
-  }
   if (tokenLabel === "SYSTEM") return "系统";
+
+  // Observer mode prefers the platform-supplied team name. We look it up via
+  // the token directly, or by playerId → token → team name once GAME_STATE
+  // tells us which token is which player.
+  if (state.connection.role === "observer" && !state.replay.enabled) {
+    if (tokenLabel && state.playerDirectory.teamNameByToken[tokenLabel]) {
+      return state.playerDirectory.teamNameByToken[tokenLabel];
+    }
+    if (typeof playerId === "number" && playerId >= 0) {
+      const teamByLabel = state.playerDirectory.labelsById[playerId];
+      if (teamByLabel) return teamByLabel;
+    }
+    return typeof playerId === "number" && playerId >= 0 ? `选手 ${playerId}` : "-";
+  }
+
+  if (tokenLabel) return tokenLabel;
   if (playerId === undefined || playerId === null || playerId < 0) return "-";
   if (playerId === state.player.playerId && state.connection.token) {
     return state.connection.token;
   }
-  if (state.playerDirectory.labelsById[playerId] && (state.replay.enabled || state.connection.role !== "observer")) {
+  if (state.playerDirectory.labelsById[playerId]) {
     return state.playerDirectory.labelsById[playerId];
   }
   return `选手 ${playerId}`;

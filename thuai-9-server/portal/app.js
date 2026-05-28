@@ -146,6 +146,8 @@ function renderSession() {
   els.gameToken.textContent = state.gameToken || "-";
 }
 
+const MAX_LOG_DISPLAY = 8 * 1024;
+
 function renderSubmissions(submissions) {
   if (!Array.isArray(submissions) || submissions.length === 0) {
     els.submissionsList.className = "empty";
@@ -157,16 +159,85 @@ function renderSubmissions(submissions) {
   els.submissionsList.innerHTML = `
     <ul class="submission-list">
       ${submissions.map((item) => `
-        <li>
-          <div>
-            <strong>#${item.id} ${escapeHtml(item.language)}</strong>
-            <div class="submission-meta">${formatTime(item.uploaded_at)}</div>
+        <li data-submission-id="${item.id}">
+          <div class="submission-row">
+            <div>
+              <strong>#${item.id} ${escapeHtml(item.language)}</strong>
+              <div class="submission-meta">${formatTime(item.uploaded_at)}</div>
+            </div>
+            <span>${escapeHtml(item.status)}</span>
+            <button type="button" class="link-button" data-action="toggle-logs" data-submission-id="${item.id}">查看日志</button>
           </div>
-          <span>${escapeHtml(item.status)}</span>
+          <div class="submission-logs" data-logs-for="${item.id}" hidden></div>
         </li>
       `).join("")}
     </ul>
   `;
+
+  els.submissionsList.querySelectorAll("[data-action='toggle-logs']").forEach((button) => {
+    button.addEventListener("click", () => toggleLogs(button.dataset.submissionId));
+  });
+}
+
+async function toggleLogs(submissionId) {
+  if (!state.accessToken) return;
+  const panel = els.submissionsList.querySelector(`[data-logs-for="${submissionId}"]`);
+  if (!panel) return;
+  if (!panel.hidden) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  panel.innerHTML = `<div class="logs-status">加载中…</div>`;
+  try {
+    const data = await requestJson(`/api/submissions/${submissionId}/logs`, {
+      headers: { Authorization: `Bearer ${state.accessToken}` },
+    });
+    panel.innerHTML = renderLogsBody(data);
+  } catch (error) {
+    panel.innerHTML = `<div class="logs-status is-error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderLogsBody(data) {
+  const sections = [];
+  if (data.compile_log) {
+    sections.push(`
+      <section class="log-section">
+        <h4>编译日志</h4>
+        <pre>${escapeHtml(truncate(data.compile_log))}</pre>
+      </section>
+    `);
+  }
+  if (Array.isArray(data.matches) && data.matches.length > 0) {
+    sections.push(`
+      <section class="log-section">
+        <h4>对局日志（最近 ${data.matches.length} 场）</h4>
+        ${data.matches.map((m) => `
+          <article class="match-log">
+            <header>
+              <strong>对局 #${m.match_id}</strong>
+              <span>${escapeHtml(m.status)}</span>
+              <span>${formatTime(m.scheduled_at)}</span>
+              ${m.score !== null && m.score !== undefined ? `<span>得分 ${m.score}</span>` : ""}
+            </header>
+            <pre>${m.log ? escapeHtml(truncate(m.log)) : "（无输出）"}</pre>
+          </article>
+        `).join("")}
+      </section>
+    `);
+  }
+  if (sections.length === 0) {
+    return `<div class="logs-status">暂无运行日志。</div>`;
+  }
+  return sections.join("");
+}
+
+function truncate(text) {
+  const str = String(text || "");
+  if (str.length <= MAX_LOG_DISPLAY) return str;
+  const dropped = str.length - MAX_LOG_DISPLAY;
+  return `... [前 ${dropped} 字节已省略] ...\n` + str.slice(-MAX_LOG_DISPLAY);
 }
 
 function renderLeaderboard(entries) {
