@@ -102,6 +102,7 @@ struct TradeNotification {
   int quantity = 0;
   std::string side;
   std::int64_t fee = 0;
+  int tick = 0;
 };
 
 struct SkillEffect {

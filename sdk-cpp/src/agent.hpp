@@ -6,11 +6,13 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "models.hpp"
 #include "protocol.hpp"
@@ -74,6 +76,7 @@ class Agent {
 
   auto getAllPlayerIds() const -> std::vector<int> {
     std::vector<int> ids;
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     for (const auto& score : gameState.scores) {
       ids.push_back(score.playerId);
     }
@@ -81,6 +84,9 @@ class Agent {
   }
 
   // --- State ---
+  // Reassigned on the WebSocket callback thread; guarded by stateMutex_.
+  // Read these only from inside the on* handlers (which receive a copy) or via
+  // the locked accessors above, never directly from another thread.
   GameState gameState{};
   MarketState marketState{};
   PlayerState playerState{};
@@ -133,7 +139,12 @@ class Agent {
 
     while (!closed) {
       std::this_thread::sleep_for(std::chrono::milliseconds(kWaitingTimeMs));
-      if (gameState.stage == "Finished") {
+      bool finished = false;
+      {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        finished = gameState.stage == "Finished";
+      }
+      if (finished) {
         spdlog::info("Game stage is Finished, stopping agent loop");
         break;
       }
@@ -147,6 +158,10 @@ class Agent {
   std::string token_;
   std::string serverUrl_;
   ix::WebSocket ws_;
+  // Serializes the snapshot writes on the WS thread against the reads in run()
+  // and getAllPlayerIds(); never held across an on* handler call so user code
+  // can re-enter (e.g. send actions) without deadlocking.
+  mutable std::mutex stateMutex_;
 
   void send(const json& data) {
     const auto payload = data.dump();
@@ -168,37 +183,52 @@ class Agent {
       }
 
       if (msgType == "GAME_STATE") {
-        gameState = protocol::parseGameState(data);
+        auto parsed = protocol::parseGameState(data);
+        {
+          const std::lock_guard<std::mutex> lock(stateMutex_);
+          gameState = parsed;
+        }
         spdlog::debug(
             "Parsed game state stage={} month={} day={} tick={}/{} "
             "scoreEntries={}",
-            gameState.stage, gameState.currentMonth, gameState.currentDay,
-            gameState.currentTick, gameState.totalTicks,
-            gameState.scores.size());
-        onGameState(gameState);
+            parsed.stage, parsed.currentMonth, parsed.currentDay,
+            parsed.currentTick, parsed.totalTicks, parsed.scores.size());
+        onGameState(parsed);
       } else if (msgType == "MARKET_STATE") {
-        marketState = protocol::parseMarketState(data);
+        auto parsed = protocol::parseMarketState(data);
+        {
+          const std::lock_guard<std::mutex> lock(stateMutex_);
+          marketState = parsed;
+        }
         spdlog::debug(
             "Parsed market state tick={} bids={} asks={} lastPrice={} "
             "midPrice={} volume={}",
-            marketState.tick, marketState.bids.size(), marketState.asks.size(),
-            marketState.lastPrice, marketState.midPrice, marketState.volume);
-        onMarketState(marketState);
+            parsed.tick, parsed.bids.size(), parsed.asks.size(),
+            parsed.lastPrice, parsed.midPrice, parsed.volume);
+        onMarketState(parsed);
       } else if (msgType == "PLAYER_STATE") {
-        playerState = protocol::parsePlayerState(data);
+        auto parsed = protocol::parsePlayerState(data);
+        {
+          const std::lock_guard<std::mutex> lock(stateMutex_);
+          playerState = parsed;
+        }
         spdlog::debug(
             "Parsed player state mora={} frozenMora={} gold={} frozenGold={} "
             "lockedGold={} nav={} pendingOrders={} activeCards={}",
-            playerState.mora, playerState.frozenMora, playerState.gold,
-            playerState.frozenGold, playerState.lockedGold, playerState.nav,
-            playerState.pendingOrders.size(), playerState.activeCards.size());
-        onPlayerState(playerState);
+            parsed.mora, parsed.frozenMora, parsed.gold, parsed.frozenGold,
+            parsed.lockedGold, parsed.nav, parsed.pendingOrders.size(),
+            parsed.activeCards.size());
+        onPlayerState(parsed);
       } else if (msgType == "NEWS_BROADCAST") {
-        latestNews = protocol::parseNews(data);
+        auto parsed = protocol::parseNews(data);
+        {
+          const std::lock_guard<std::mutex> lock(stateMutex_);
+          latestNews = parsed;
+        }
         spdlog::debug("Parsed news newsId={} month={} day={} publishTick={}",
-                      latestNews->newsId, latestNews->month, latestNews->day,
-                      latestNews->publishTick);
-        onNews(*latestNews);
+                      parsed.newsId, parsed.month, parsed.day,
+                      parsed.publishTick);
+        onNews(parsed);
       } else if (msgType == "REPORT_RESULT") {
         const auto result = protocol::parseReportResult(data);
         spdlog::debug(
@@ -206,21 +236,24 @@ class Agent {
             result.newsId, result.prediction, result.isCorrect, result.reward);
         onReportResult(result);
       } else if (msgType == "STRATEGY_OPTIONS") {
-        strategyOptions = protocol::parseStrategyOptions(data);
+        auto parsed = protocol::parseStrategyOptions(data);
+        {
+          const std::lock_guard<std::mutex> lock(stateMutex_);
+          strategyOptions = parsed;
+        }
         spdlog::debug(
             "Parsed strategy options infrastructure={} riskControl={} "
             "finTech={}",
-            strategyOptions->infrastructure.has_value(),
-            strategyOptions->riskControl.has_value(),
-            strategyOptions->finTech.has_value());
-        onStrategyOptions(*strategyOptions);
+            parsed.infrastructure.has_value(), parsed.riskControl.has_value(),
+            parsed.finTech.has_value());
+        onStrategyOptions(parsed);
       } else if (msgType == "TRADE_NOTIFICATION") {
         const auto trade = protocol::parseTrade(data);
         spdlog::debug(
             "Parsed trade tradeId={} orderId={} side={} price={} quantity={} "
-            "fee={}",
+            "fee={} tick={}",
             trade.tradeId, trade.orderId, trade.side, trade.price,
-            trade.quantity, trade.fee);
+            trade.quantity, trade.fee, trade.tick);
         onTrade(trade);
       } else if (msgType == "SKILL_EFFECT") {
         const auto effect = protocol::parseSkillEffect(data);
@@ -234,14 +267,17 @@ class Agent {
             effect.description);
         onSkillEffect(effect);
       } else if (msgType == "DAY_SETTLEMENT") {
-        latestDaySettlement = protocol::parseDaySettlement(data);
+        auto parsed = protocol::parseDaySettlement(data);
+        {
+          const std::lock_guard<std::mutex> lock(stateMutex_);
+          latestDaySettlement = parsed;
+        }
         spdlog::debug(
             "Parsed day settlement month={} day={} winnerPlayerId={} "
             "players={}",
-            latestDaySettlement->month, latestDaySettlement->day,
-            latestDaySettlement->winnerPlayerId,
-            latestDaySettlement->players.size());
-        onDaySettlement(*latestDaySettlement);
+            parsed.month, parsed.day, parsed.winnerPlayerId,
+            parsed.players.size());
+        onDaySettlement(parsed);
       } else if (msgType == "ERROR") {
         const int code = data.value("errorCode", 0);
         const std::string message = data.value("message", std::string(""));

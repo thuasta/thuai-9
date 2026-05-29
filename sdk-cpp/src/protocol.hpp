@@ -215,6 +215,7 @@ inline auto parseTrade(const json& data) -> TradeNotification {
   tradeNotification.quantity = data.value("quantity", 0);
   tradeNotification.side = data.value("side", "");
   tradeNotification.fee = data.value("fee", std::int64_t{0});
+  tradeNotification.tick = data.value("tick", 0);
   return tradeNotification;
 }
 
