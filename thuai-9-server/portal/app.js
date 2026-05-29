@@ -250,12 +250,14 @@ async function toggleLogs(submissionId) {
     stopLogPolling(submissionId);
     return;
   }
+  if (panel.dataset.loading === "1") return;
   panel.hidden = false;
   await loadSubmissionLogs(submissionId, panel);
 }
 
 async function loadSubmissionLogs(submissionId, panel) {
   stopLogPolling(submissionId);
+  panel.dataset.loading = "1";
   panel.innerHTML = `<div class="logs-status">加载中…</div>`;
   try {
     const data = await requestJson(`/api/submissions/${submissionId}/logs`, {
@@ -275,9 +277,13 @@ async function loadSubmissionLogs(submissionId, panel) {
       logPollers.set(String(submissionId), timerId);
     }
   } catch (error) {
-    if (panel.hidden) return;
-    panel.innerHTML = `<div class="logs-status is-error">${escapeHtml(error.message)}</div>`;
+    if (!panel.hidden) {
+      panel.innerHTML = `<div class="logs-status is-error">${escapeHtml(error.message)}</div>`;
+    }
+  } finally {
+    delete panel.dataset.loading;
   }
+}
 }
 
 async function downloadSubmissionLogs(submissionId) {
@@ -348,10 +354,10 @@ function renderLogsBody(data) {
         ${data.matches.map((m) => `
           <article class="match-log">
             <header>
-              <strong>对局 #${m.match_id}</strong>
+              <strong>对局 #${escapeHtml(String(m.match_id))}</strong>
               <span>${escapeHtml(m.status)}</span>
-              <span>${formatTime(m.scheduled_at)}</span>
-              ${m.score !== null && m.score !== undefined ? `<span>得分 ${m.score}</span>` : ""}
+              <span>${escapeHtml(formatTime(m.scheduled_at))}</span>
+              ${m.score !== null && m.score !== undefined ? `<span>得分 ${escapeHtml(String(m.score))}</span>` : ""}
             </header>
             <pre>${m.log ? escapeHtml(truncate(m.log)) : "（无输出）"}</pre>
           </article>
@@ -375,7 +381,7 @@ function truncate(text) {
   const str = String(text || "");
   if (str.length <= MAX_LOG_DISPLAY) return str;
   const dropped = str.length - MAX_LOG_DISPLAY;
-  return `... [前 ${dropped} 字节已省略] ...\n` + str.slice(-MAX_LOG_DISPLAY);
+  return `... [前 ${dropped} 字符已省略] ...\n` + str.slice(-MAX_LOG_DISPLAY);
 }
 
 function renderLeaderboard(entries) {

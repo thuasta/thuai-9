@@ -178,11 +178,14 @@ def _collect_agent_logs(containers) -> str:
 # Cap per-agent log to a fixed size before persisting so a runaway agent can't
 # explode the database. Matches what the portal will display anyway.
 PER_AGENT_LOG_BYTES = 64 * 1024
+# Bound how many lines we pull out of Docker into evaluator memory in the first
+# place — a runaway agent can emit gigabytes, but we only keep the tail anyway.
+LOG_TAIL_LINES = 5000
 
 
 def _read_container_log(container) -> str:
     try:
-        raw = container.logs(stdout=True, stderr=True)
+        raw = container.logs(stdout=True, stderr=True, tail=LOG_TAIL_LINES)
     except Exception as exc:
         return f"<failed to read logs: {exc}>"
     text = raw.decode("utf-8", errors="replace")

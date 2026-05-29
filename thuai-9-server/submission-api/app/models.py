@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -77,6 +77,11 @@ class SubmissionMatchLog(Base):
     every run regardless of outcome. Visible only to the owning team."""
 
     __tablename__ = "submission_match_logs"
+    # The owning team reads its logs newest-first; this index covers the
+    # `WHERE submission_id = ? ORDER BY created_at DESC` access pattern.
+    __table_args__ = (
+        Index("ix_submission_match_logs_submission_created", "submission_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     match_id: Mapped[int] = mapped_column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)

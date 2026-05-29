@@ -114,8 +114,10 @@ class SubmissionLogsOut(BaseModel):
 
 
 class PlayerMapEntry(BaseModel):
-    player_token: str
-    submission_id: int
+    # player_id is the game server's 0-based player index for this match; it
+    # matches the playerId in the live GAME_STATE stream. The secret player_token
+    # is intentionally NOT exposed here.
+    player_id: int
     team_id: int
     team_name: str
 

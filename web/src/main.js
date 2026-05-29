@@ -312,7 +312,7 @@ async function fetchPlayerMap() {
     applyManagedObserverMatch(data);
     renderApp(state);
   } catch {
-    // Silent — the spectator UI still works with token-based labels if the API is down.
+    // Silent — the spectator UI falls back to "选手 N" labels if the API is down.
   }
 }
 

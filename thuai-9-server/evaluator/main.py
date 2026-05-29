@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import random
+import secrets
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, inspect, select, text, update
@@ -19,8 +20,12 @@ engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # Import models after engine is set up
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase
+
+# Keep at most this many match-log rows per submission so a long-lived arena
+# can't grow the table without bound.
+LOG_RETENTION_PER_SUBMISSION = 50
 
 
 class Base(DeclarativeBase):
@@ -67,12 +72,21 @@ class MatchParticipant(Base):
 
 class SubmissionMatchLog(Base):
     __tablename__ = "submission_match_logs"
+    # Mirror of submission-api's app/models.py SubmissionMatchLog. The
+    # authoritative DDL (including the teams FK) is owned by submission-api,
+    # which starts first (see docker-compose depends_on). team_id has no
+    # ForeignKey here because this Base does not model the teams table; if this
+    # fallback create_all ever wins the bootstrap, the column is still correct,
+    # only the teams cascade is deferred to submission-api's schema.
+    __table_args__ = (
+        Index("ix_submission_match_logs_submission_created", "submission_id", "created_at"),
+    )
     id = Column(Integer, primary_key=True)
     match_id = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
     submission_id = Column(Integer, ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False)
     team_id = Column(Integer, nullable=False)
     log = Column(Text, nullable=False, default="")
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 os.makedirs(settings.artifact_dir, exist_ok=True)
@@ -276,12 +290,17 @@ async def arena_loop():
                     )
                     db.add(match)
                     await db.flush()
+                    # The player_token doubles as the live-server auth credential
+                    # (it gets loaded into the game server's TOKENS allowlist), so
+                    # it must be an unguessable secret — never derivable from public
+                    # ids. Anyone who learns it could bind to the live WebSocket as
+                    # that team's agent.
                     participants = [
                         MatchParticipant(
                             match_id=match.id,
                             submission_id=sub.id,
                             team_id=sub.team_id,
-                            player_token=f"m{match.id}s{sub.id}",
+                            player_token=secrets.token_urlsafe(24),
                         )
                         for sub in ready
                     ]
@@ -296,6 +315,46 @@ async def arena_loop():
             logger.exception("arena_loop error")
 
         await asyncio.sleep(30)
+
+
+async def _prune_submission_logs(db, submission_ids):
+    """Keep only the most recent LOG_RETENTION_PER_SUBMISSION rows per submission."""
+    for sub_id in submission_ids:
+        keep_result = await db.execute(
+            select(SubmissionMatchLog.id)
+            .where(SubmissionMatchLog.submission_id == sub_id)
+            .order_by(SubmissionMatchLog.id.desc())
+            .limit(LOG_RETENTION_PER_SUBMISSION)
+        )
+        keep_ids = [row[0] for row in keep_result.all()]
+        if len(keep_ids) >= LOG_RETENTION_PER_SUBMISSION:
+            await db.execute(
+                delete(SubmissionMatchLog)
+                .where(SubmissionMatchLog.submission_id == sub_id)
+                .where(SubmissionMatchLog.id.notin_(keep_ids))
+            )
+    await db.commit()
+
+
+async def _persist_match_logs(match_id, agents, agent_logs):
+    """Best-effort persistence of per-agent container output.
+
+    Runs in its own transaction, decoupled from the match-completion commit, so
+    a log-write failure can never roll the match back into a stuck "running"
+    state (the runner loop only re-picks "pending" rows)."""
+    try:
+        async with AsyncSessionLocal() as db:
+            for agent in agents:
+                db.add(SubmissionMatchLog(
+                    match_id=match_id,
+                    submission_id=agent.submission_id,
+                    team_id=agent.team_id,
+                    log=agent_logs.get(agent.submission_id, ""),
+                ))
+            await db.commit()
+            await _prune_submission_logs(db, {agent.submission_id for agent in agents})
+    except Exception:
+        logger.exception("failed to persist match logs for match %d", match_id)
 
 
 async def match_runner_loop():
@@ -351,13 +410,13 @@ async def match_runner_loop():
                                 submission_id=submissions[match.submission_a_id].id,
                                 team_id=submissions[match.submission_a_id].team_id,
                                 image_ref=submissions[match.submission_a_id].artifact_path or "",
-                                token=f"m{match.id}s{match.submission_a_id}",
+                                token=secrets.token_urlsafe(24),
                             ),
                             MatchAgent(
                                 submission_id=submissions[match.submission_b_id].id,
                                 team_id=submissions[match.submission_b_id].team_id,
                                 image_ref=submissions[match.submission_b_id].artifact_path or "",
-                                token=f"m{match.id}s{match.submission_b_id}",
+                                token=secrets.token_urlsafe(24),
                             ),
                         ]
 
@@ -378,18 +437,6 @@ async def match_runner_loop():
                                 .values(score=scores.get(row.submission_id))
                             )
 
-                    # Persist per-agent container output for every participant
-                    # whose container we successfully spawned, win or lose.
-                    # The owning team will be able to fetch this from the API.
-                    for agent in agents:
-                        log_text = agent_logs.get(agent.submission_id, "")
-                        db.add(SubmissionMatchLog(
-                            match_id=match.id,
-                            submission_id=agent.submission_id,
-                            team_id=agent.team_id,
-                            log=log_text,
-                        ))
-
                     await db.execute(
                         update(Match)
                         .where(Match.id == match.id)
@@ -401,8 +448,14 @@ async def match_runner_loop():
                             finished_at=datetime.now(timezone.utc),
                         )
                     )
+                    # Match completion is the source of truth for the leaderboard
+                    # and the runner loop, so commit it before touching logs.
                     await db.commit()
                     logger.info("Match %d finished: %s", match.id, scores)
+
+                    # Per-agent container output, persisted out-of-band so a log
+                    # failure cannot strand the (already finished) match.
+                    await _persist_match_logs(match.id, agents, agent_logs)
         except Exception:
             logger.exception("match_runner_loop error")
 

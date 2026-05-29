@@ -287,6 +287,9 @@ code {
 }
 
 .submission-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 12px;

@@ -589,21 +589,20 @@ function emptyPlayerDirectory() {
   return {
     labelsById: {},
     idsByToken: {},
-    teamNameByToken: {},
   };
 }
 
+// The platform endpoint maps the game server's 0-based player_id (same index as
+// the playerId in the live GAME_STATE stream) to a team name. We key labels by
+// player_id directly — observers never receive the in-game token, so a
+// token-keyed bridge could never resolve for them.
 export function applyPlayerMap(state, entries) {
   if (!Array.isArray(entries)) return;
   for (const entry of entries) {
-    const token = String(entry.player_token || "").trim();
+    const id = numberOr(entry.player_id, -1);
     const teamName = String(entry.team_name || "").trim();
-    if (!token || !teamName) continue;
-    state.playerDirectory.teamNameByToken[token] = teamName;
-    const knownId = state.playerDirectory.idsByToken[token];
-    if (typeof knownId === "number" && knownId >= 0) {
-      state.playerDirectory.labelsById[knownId] = teamName;
-    }
+    if (id < 0 || !teamName) continue;
+    state.playerDirectory.labelsById[id] = teamName;
   }
 }
 
@@ -621,11 +620,11 @@ function registerPlayerIdentity(state, playerId, token) {
   const label = String(token || "").trim();
   if (id < 0 || !label) return;
   state.playerDirectory.idsByToken[label] = id;
-  // Prefer the team name from the platform mapping if available; otherwise
-  // fall back to the in-game token so the existing identity flow still works
-  // (used by player + admin views via playerDisplayName).
-  const teamName = state.playerDirectory.teamNameByToken[label];
-  state.playerDirectory.labelsById[id] = teamName || label;
+  // Only fall back to the in-game token as a label if the platform mapping
+  // hasn't already supplied a team name for this player (don't clobber it).
+  if (!state.playerDirectory.labelsById[id]) {
+    state.playerDirectory.labelsById[id] = label;
+  }
 }
 
 function actorFromMessage(state, message) {
@@ -651,28 +650,33 @@ function numberOr(value, fallback) {
 export function playerDisplayName(state, playerId, token = "") {
   const tokenLabel = String(token || "").trim();
   if (tokenLabel === "SYSTEM") return "系统";
+  const id = numberOr(playerId, -1);
 
-  // Observer mode prefers the platform-supplied team name. We look it up via
-  // the token directly, or by playerId → token → team name once GAME_STATE
-  // tells us which token is which player.
-  if (state.connection.role === "observer" && !state.replay.enabled) {
-    if (tokenLabel && state.playerDirectory.teamNameByToken[tokenLabel]) {
-      return state.playerDirectory.teamNameByToken[tokenLabel];
-    }
-    if (typeof playerId === "number" && playerId >= 0) {
-      const teamByLabel = state.playerDirectory.labelsById[playerId];
-      if (teamByLabel) return teamByLabel;
-    }
-    return typeof playerId === "number" && playerId >= 0 ? `选手 ${playerId}` : "-";
+  // Replay: identities come from the replay payload's own tokens. Never consult
+  // labelsById — those describe whichever match the live poll is tracking now,
+  // which has nothing to do with the match being replayed.
+  if (state.replay.enabled) {
+    if (tokenLabel) return tokenLabel;
+    return id >= 0 ? `选手 ${id}` : "-";
   }
 
-  if (tokenLabel) return tokenLabel;
-  if (playerId === undefined || playerId === null || playerId < 0) return "-";
-  if (playerId === state.player.playerId && state.connection.token) {
+  // Live observer: show the platform team name (keyed by playerId), never the
+  // raw in-game token (observers don't receive it anyway).
+  if (state.connection.role === "observer") {
+    if (id >= 0 && state.playerDirectory.labelsById[id]) {
+      return state.playerDirectory.labelsById[id];
+    }
+    return id >= 0 ? `选手 ${id}` : "-";
+  }
+
+  // Live player / admin: own token, then any team-name label, then the id.
+  if (id >= 0 && id === state.player.playerId && state.connection.token) {
     return state.connection.token;
   }
-  if (state.playerDirectory.labelsById[playerId]) {
-    return state.playerDirectory.labelsById[playerId];
+  if (tokenLabel) return tokenLabel;
+  if (id < 0) return "-";
+  if (state.playerDirectory.labelsById[id]) {
+    return state.playerDirectory.labelsById[id];
   }
-  return `选手 ${playerId}`;
+  return `选手 ${id}`;
 }
