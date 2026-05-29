@@ -7,11 +7,13 @@ class Settings(BaseSettings):
     upload_dir: str = "/data/uploads"
     match_data_dir: str = "/tmp/matches"
     game_config_dir: str = "/game-config"
+    evaluator_container_name: str = "thuai9-evaluator"
+    live_server_config_dir: str = "/tmp/matches/live-server-data"
     live_server_image: str = "ghcr.io/thuasta/thuai-9-server:latest"
     live_server_container: str = "thuai9-live-server"
     live_server_url: str = "ws://thuai9-live-server:14514"
     live_server_network: str = "thuai-9-server_internal"
-    live_server_data_dir: str = "/data/live-server"
+    live_server_data_dir: str = "/tmp/matches/live-server-data"
     restart_live_server: bool = True
 
     class Config:

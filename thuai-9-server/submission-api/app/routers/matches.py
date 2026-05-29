@@ -8,8 +8,23 @@ from app.database import get_db
 from app.dependencies import get_current_team, require_admin
 from app.models import Match, MatchParticipant, Submission, Team
 from app.schemas import MatchOut, PlayerMapEntry, PlayerMapOut, TriggerMatchRequest
+from app.score_utils import serialize_score
 
 router = APIRouter()
+
+
+def _serialize_match(match: Match) -> MatchOut:
+    return MatchOut(
+        id=match.id,
+        mode=match.mode,
+        submission_a_id=match.submission_a_id,
+        submission_b_id=match.submission_b_id,
+        status=match.status,
+        score_a=serialize_score(match.score_a),
+        score_b=serialize_score(match.score_b),
+        scheduled_at=match.scheduled_at,
+        finished_at=match.finished_at,
+    )
 
 
 @router.get("/", response_model=list[MatchOut])
@@ -39,7 +54,7 @@ async def list_my_matches(
         .order_by(Match.scheduled_at.desc())
         .limit(50)
     )
-    return result.scalars().all()
+    return [_serialize_match(match) for match in result.scalars().all()]
 
 
 @router.post("/admin/trigger", response_model=MatchOut, dependencies=[Depends(require_admin)])
@@ -81,7 +96,7 @@ async def trigger_match(body: TriggerMatchRequest, db: AsyncSession = Depends(ge
     ])
     await db.commit()
     await db.refresh(match)
-    return match
+    return _serialize_match(match)
 
 
 @router.get("/admin/all", response_model=list[MatchOut], dependencies=[Depends(require_admin)])
@@ -89,7 +104,7 @@ async def list_all_matches(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Match).order_by(Match.scheduled_at.desc()).limit(100)
     )
-    return result.scalars().all()
+    return [_serialize_match(match) for match in result.scalars().all()]
 
 
 @router.get("/current/player-map", response_model=PlayerMapOut)

@@ -2,9 +2,10 @@ namespace Thuai.GameLogic;
 
 public class NewsSystem
 {
+    private static readonly int[] DefaultScheduledNewsTicks = [1, 11, 21];
     private readonly Random _rng = new();
     private readonly int _researchWindow;
-    private static readonly int[] ScheduledNewsDays = [1, 11, 21];
+    private readonly int[] _scheduledNewsTicks;
     private int _nextNewsId = 1;
     private int _scheduledIndex;
     private int _nextNewsTick;
@@ -41,16 +42,18 @@ public class NewsSystem
         "曾经坚定的看多专家今日改口：黄金太重不好带，还是存摩拉最实在"
     ];
 
-    public NewsSystem(int intervalMin = 1, int intervalMax = 1, int researchWindow = 2)
+    public NewsSystem(int intervalMin = 1, int intervalMax = 1, int researchWindow = 2,
+        IReadOnlyList<int>? scheduledNewsTicks = null)
     {
         _researchWindow = researchWindow;
+        _scheduledNewsTicks = NormalizeScheduledTicks(scheduledNewsTicks);
         _scheduledIndex = 0;
-        _nextNewsTick = ScheduledNewsDays[0];
+        _nextNewsTick = _scheduledNewsTicks.Length > 0 ? _scheduledNewsTicks[0] : int.MaxValue;
     }
 
     public News? Tick(int currentTick)
     {
-        if (_scheduledIndex >= ScheduledNewsDays.Length || currentTick < _nextNewsTick)
+        if (_scheduledIndex >= _scheduledNewsTicks.Length || currentTick < _nextNewsTick)
             return null;
 
         News news;
@@ -76,8 +79,8 @@ public class NewsSystem
         _latestNews = news;
 
         _scheduledIndex++;
-        _nextNewsTick = _scheduledIndex < ScheduledNewsDays.Length
-            ? ScheduledNewsDays[_scheduledIndex]
+        _nextNewsTick = _scheduledIndex < _scheduledNewsTicks.Length
+            ? _scheduledNewsTicks[_scheduledIndex]
             : int.MaxValue;
 
         return news;
@@ -91,7 +94,7 @@ public class NewsSystem
     /// </summary>
     public News? PreGenerateNextNews()
     {
-        if (_scheduledIndex >= ScheduledNewsDays.Length)
+        if (_scheduledIndex >= _scheduledNewsTicks.Length)
             return null;
 
         if (_preGeneratedNews != null)
@@ -158,8 +161,8 @@ public class NewsSystem
 
     public NewsSentiment? CurrentSentiment => _latestNews?.Sentiment;
 
-    public int? NextNewsTickForInsider => _nextNewsTick > 3 ? _nextNewsTick - 3 : null;
-    public int PreviewTick => _scheduledIndex < ScheduledNewsDays.Length ? Math.Max(0, _nextNewsTick - 3) : -1;
+    public int? NextNewsTickForInsider => _nextNewsTick is > 3 and < int.MaxValue ? _nextNewsTick - 3 : null;
+    public int PreviewTick => _scheduledIndex < _scheduledNewsTicks.Length ? Math.Max(0, _nextNewsTick - 3) : -1;
 
     public int NextNewsTick => _nextNewsTick;
 
@@ -192,6 +195,20 @@ public class NewsSystem
         _latestNews = null;
         _preGeneratedNews = null;
         _scheduledIndex = 0;
-        _nextNewsTick = ScheduledNewsDays[0];
+        _nextNewsTick = _scheduledNewsTicks.Length > 0 ? _scheduledNewsTicks[0] : int.MaxValue;
+    }
+
+    private static int[] NormalizeScheduledTicks(IReadOnlyList<int>? scheduledNewsTicks)
+    {
+        if (scheduledNewsTicks == null)
+            return [.. DefaultScheduledNewsTicks];
+        if (scheduledNewsTicks.Count == 0)
+            return [];
+
+        return scheduledNewsTicks
+            .Where(tick => tick >= 0)
+            .Distinct()
+            .OrderBy(tick => tick)
+            .ToArray();
     }
 }

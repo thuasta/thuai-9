@@ -5,7 +5,7 @@ using Serilog;
 public partial class Game
 {
     public Dictionary<string, Player> Players { get; } = new();
-    public Dictionary<string, int> Scoreboard { get; } = new();
+    public Dictionary<string, long> Scoreboard { get; } = new();
 
     private int _nextPlayerId;
     private readonly HashSet<string> _queuedPlayerJoins = new();
@@ -91,11 +91,11 @@ public partial class Game
         }
     }
 
-    public Dictionary<string, int> GetScoreboardSnapshot()
+    public Dictionary<string, long> GetScoreboardSnapshot()
     {
         lock (_lock)
         {
-            return new Dictionary<string, int>(Scoreboard);
+            return new Dictionary<string, long>(Scoreboard);
         }
     }
 

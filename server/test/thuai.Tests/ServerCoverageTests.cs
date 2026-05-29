@@ -353,6 +353,33 @@ public class RecorderCoverageTests
         }
     }
 
+    [Fact]
+    public void Recorder_DisposeCreatesTimestampedHistoryReplay()
+    {
+        var dir = TempDir();
+        try
+        {
+            using (var recorder = new RecorderService(dir))
+            {
+                recorder.Record(new { stage = "TradingDay", tick = 1 });
+            }
+
+            var replayFile = Path.Combine(dir, "replay.dat");
+            var historyDir = Path.Combine(dir, "history-replay");
+            Assert.True(File.Exists(replayFile));
+            Assert.True(Directory.Exists(historyDir));
+
+            var historyFiles = Directory.GetFiles(historyDir, "*.dat");
+            Assert.Single(historyFiles);
+            Assert.Matches(@"^\d{8}_\d{9}(_\d+)?\.dat$", Path.GetFileName(historyFiles[0]));
+            Assert.Equal(File.ReadAllBytes(replayFile), File.ReadAllBytes(historyFiles[0]));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     private static string TempDir()
     {
         var dir = Path.Combine(Path.GetTempPath(), "thuai-tests", Guid.NewGuid().ToString("N"));
@@ -666,6 +693,16 @@ public class TradingDayCoverageTests
     }
 
     [Fact]
+    public void HandleSubmitReport_RejectsWhenResearchDisabled()
+    {
+        var (day, _) = CreateTradingDay(researchEnabled: false);
+        var news = day.NewsSystem.InjectFakeNews(0, "alpha", NewsSentiment.Bullish);
+
+        Assert.False(day.HandleSubmitReport("alpha", news.NewsId, Prediction.Long));
+        Assert.Empty(day.ResearchSystem.PendingReports);
+    }
+
+    [Fact]
     public void HandleActivateSkill_ExercisesTradingSkills()
     {
         var (day, players) = CreateTradingDay(maxTicks: 5);
@@ -708,7 +745,13 @@ public class TradingDayCoverageTests
         Assert.False(players["alpha"].IsImmune);
     }
 
-    private static (TradingDay Day, Dictionary<string, Player> Players) CreateTradingDay(int maxTicks = 5, bool initialize = true)
+    private static (TradingDay Day, Dictionary<string, Player> Players) CreateTradingDay(
+        int maxTicks = 5,
+        bool initialize = true,
+        bool researchEnabled = true,
+        int maxReportsPerTick = 1,
+        int maxReportsPerNews = 1,
+        IReadOnlyList<int>? scheduledNewsTicks = null)
     {
         var players = new Dictionary<string, Player>
         {
@@ -716,7 +759,20 @@ public class TradingDayCoverageTests
             ["beta"] = new Player("beta", 1)
         };
 
-        var day = new TradingDay(players, maxTicks, 1000, 1, 1, 2, 3, 100, 0);
+        var day = new TradingDay(
+            players,
+            maxTicks,
+            1000,
+            1,
+            1,
+            2,
+            3,
+            100,
+            0,
+            researchEnabled: researchEnabled,
+            maxReportsPerTick: maxReportsPerTick,
+            maxReportsPerNews: maxReportsPerNews,
+            scheduledNewsTicks: scheduledNewsTicks);
         if (initialize)
         {
             day.Initialize();

@@ -104,11 +104,23 @@ public record GameSettings
     [JsonPropertyName("maxRestingOrdersPerDay")]
     public int MaxRestingOrdersPerDay { get; init; } = 1;
 
+    [JsonPropertyName("maxReportsPerNews")]
+    public int MaxReportsPerNews { get; init; } = 1;
+
+    [JsonPropertyName("maxReportsPerTick")]
+    public int MaxReportsPerTick { get; init; } = 1;
+
     [JsonPropertyName("newsIntervalMin")]
     public int NewsIntervalMin { get; init; } = 200;
 
     [JsonPropertyName("newsIntervalMax")]
     public int NewsIntervalMax { get; init; } = 400;
+
+    [JsonPropertyName("researchEnabled")]
+    public bool ResearchEnabled { get; init; } = true;
+
+    [JsonPropertyName("researchNewsScheduleTicks")]
+    public int[] ResearchNewsScheduleTicks { get; init; } = [1, 11, 21];
 
     [JsonPropertyName("researchWindowTicks")]
     public int ResearchWindowTicks { get; init; } = 2;

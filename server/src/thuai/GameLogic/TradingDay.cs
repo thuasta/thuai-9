@@ -15,6 +15,9 @@ public class TradingDay
     private readonly NewsSystem _newsSystem;
     private readonly NPCTrader _npcTrader;
     private readonly ResearchSystem _researchSystem;
+    private readonly bool _researchEnabled;
+    private readonly int _maxReportsPerTick;
+    private readonly int _maxReportsPerNews;
     private readonly Dictionary<int, long> _midPriceHistory = new();
     private readonly List<Trade> _tradesThisDay = new();
     private readonly List<ResearchReport> _settledReportsThisDay = new();
@@ -50,7 +53,11 @@ public class TradingDay
         int researchSettlementDelay,
         long baseResearchReward,
         int npcOrdersPerTick,
-        int monthNumber = 1)
+        int monthNumber = 1,
+        bool researchEnabled = true,
+        int maxReportsPerTick = 1,
+        int maxReportsPerNews = 1,
+        IReadOnlyList<int>? scheduledNewsTicks = null)
     {
         MonthNumber = monthNumber;
         _maxTicks = maxTicks;
@@ -58,9 +65,12 @@ public class TradingDay
         _players = players;
         _orderBook = new OrderBook(initialGoldPrice);
         _matchEngine = new MatchEngine(_orderBook, players);
-        _newsSystem = new NewsSystem(newsIntervalMin, newsIntervalMax, researchWindow);
+        _newsSystem = new NewsSystem(newsIntervalMin, newsIntervalMax, researchWindow, scheduledNewsTicks);
         _npcTrader = new NPCTrader(npcOrdersPerTick);
         _researchSystem = new ResearchSystem(_newsSystem, baseResearchReward, researchWindow, researchSettlementDelay);
+        _researchEnabled = researchEnabled;
+        _maxReportsPerTick = Math.Max(0, maxReportsPerTick);
+        _maxReportsPerNews = Math.Max(0, maxReportsPerNews);
     }
 
     public void Initialize()
@@ -78,6 +88,7 @@ public class TradingDay
         foreach (var player in _players.Values)
         {
             player.ResetDailyActionCounters();
+            player.ConfigureReportLimits(_maxReportsPerTick, _maxReportsPerNews);
         }
 
         SeedInitialLiquidity();
@@ -170,8 +181,10 @@ public class TradingDay
     {
         lock (_lock)
         {
+            if (!_researchEnabled) return false;
             if (_isFinished) return false;
             if (!_players.TryGetValue(playerToken, out var player)) return false;
+            if (!player.CanSubmitReport()) return false;
             if (!player.CanSubmitReport(newsId)) return false;
 
             var report = _researchSystem.SubmitReport(playerToken, newsId, prediction, _currentTick);
@@ -354,6 +367,9 @@ public class TradingDay
 
     private void SettlePendingReports()
     {
+        if (!_researchEnabled)
+            return;
+
         foreach (var report in _researchSystem.SettleReports(_currentTick, GetMidPriceAtTick))
         {
             if (!_players.TryGetValue(report.PlayerToken, out var player))

@@ -14,17 +14,34 @@ async def ensure_schema() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
         def add_submission_columns(sync_conn) -> None:
-            def ensure_column(column_name: str, ddl: str) -> None:
+            def _refresh_columns(table_name: str):
                 inspector = inspect(sync_conn)
-                columns = {column["name"] for column in inspector.get_columns("submissions")}
+                return {column["name"]: column for column in inspector.get_columns(table_name)}
+
+            def ensure_column(column_name: str, ddl: str) -> None:
+                columns = set(_refresh_columns("submissions"))
                 if column_name in columns:
                     return
                 try:
                     sync_conn.execute(text(ddl))
                 except Exception:
-                    inspector = inspect(sync_conn)
-                    columns = {column["name"] for column in inspector.get_columns("submissions")}
+                    columns = set(_refresh_columns("submissions"))
                     if column_name not in columns:
+                        raise
+
+            def ensure_bigint(table_name: str, column_name: str) -> None:
+                columns = _refresh_columns(table_name)
+                if column_name not in columns:
+                    return
+                if "BIGINT" in str(columns[column_name]["type"]).upper():
+                    return
+                try:
+                    sync_conn.execute(
+                        text(f"ALTER TABLE {table_name} ALTER COLUMN {column_name} TYPE BIGINT")
+                    )
+                except Exception:
+                    columns = _refresh_columns(table_name)
+                    if column_name not in columns or "BIGINT" not in str(columns[column_name]["type"]).upper():
                         raise
 
             ensure_column("name", "ALTER TABLE submissions ADD COLUMN name VARCHAR(64)")
@@ -32,6 +49,11 @@ async def ensure_schema() -> None:
                 "is_dispatched",
                 "ALTER TABLE submissions ADD COLUMN is_dispatched BOOLEAN DEFAULT FALSE",
             )
+
+            if sync_conn.dialect.name == "postgresql":
+                ensure_bigint("matches", "score_a")
+                ensure_bigint("matches", "score_b")
+                ensure_bigint("match_participants", "score")
 
         await conn.run_sync(add_submission_columns)
 

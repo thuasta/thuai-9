@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Match, MatchParticipant, Submission, Team
 from app.schemas import LeaderboardEntry
+from app.score_utils import average_score_value, serialize_average_score, serialize_score
 
 router = APIRouter()
 
@@ -63,30 +66,30 @@ async def leaderboard(db: AsyncSession = Depends(get_db)):
         if submission_b_id in submissions and score_b is not None:
             stats.setdefault(submission_b_id, []).append(score_b)
 
-    entries = []
+    entries: list[tuple[Decimal, int, LeaderboardEntry]] = []
     for submission_id, scores in stats.items():
         if not scores:
             continue
         total_score = sum(scores)
         total_matches = len(scores)
         submission = submissions[submission_id]
-        entries.append(
-            LeaderboardEntry(
+        average_value = average_score_value(total_score, total_matches)
+        entry = LeaderboardEntry(
                 submission_id=submission_id,
                 submission_name=submission["submission_name"],
                 team_name=submission["team_name"],
-                total_score=total_score,
-                average_score=round(total_score / total_matches, 3) if total_matches else 0,
-                best_score=max(scores) if scores else None,
+                total_score=serialize_score(total_score) or "0",
+                average_score=serialize_average_score(total_score, total_matches),
+                best_score=serialize_score(max(scores) if scores else None),
                 total_matches=total_matches,
-            )
         )
+        entries.append((average_value, total_score, entry))
     entries.sort(
-        key=lambda e: (
-            -e.average_score,
-            -e.total_score,
-            e.submission_name,
-            e.submission_id,
+        key=lambda item: (
+            -item[0],
+            -item[1],
+            item[2].submission_name,
+            item[2].submission_id,
         )
     )
-    return entries
+    return [entry for _, _, entry in entries]

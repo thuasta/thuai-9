@@ -31,7 +31,7 @@ public record PlayerScore
     public int PlayerId { get; init; }
 
     [JsonPropertyName("score")]
-    public int Score { get; init; }
+    public long Score { get; init; }
 }
 
 public record MarketStateMessage : Message
@@ -367,7 +367,7 @@ public record DebugQueryResponseMessage : Message
     public int CurrentTick { get; init; }
 
     [JsonPropertyName("scoreboard")]
-    public Dictionary<int, int>? Scoreboard { get; init; }
+    public Dictionary<int, long>? Scoreboard { get; init; }
 
     [JsonPropertyName("cumulativeNavs")]
     public Dictionary<int, long>? CumulativeNavs { get; init; }

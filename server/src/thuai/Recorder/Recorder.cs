@@ -14,8 +14,10 @@ public class Recorder : IDisposable
     private readonly string _recordsDir;
     private readonly string _targetRecordFilePath;
     private readonly string _targetResultFilePath;
+    private readonly string _historyReplayDir;
     private readonly int _flushEveryRecords;
     private bool _disposed;
+    private bool _historyReplaySaved;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -31,6 +33,7 @@ public class Recorder : IDisposable
         _flushEveryRecords = Math.Max(1, flushEveryRecords);
         _targetRecordFilePath = Path.Combine(recordsDir, "replay.dat");
         _targetResultFilePath = Path.Combine(recordsDir, "result.json");
+        _historyReplayDir = Path.Combine(recordsDir, "history-replay");
 
         Directory.CreateDirectory(recordsDir);
 
@@ -83,7 +86,7 @@ public class Recorder : IDisposable
         }
     }
 
-    public void SaveResults(Dictionary<string, int> scores)
+    public void SaveResults(Dictionary<string, long> scores)
     {
         try
         {
@@ -114,11 +117,40 @@ public class Recorder : IDisposable
         if (_disposed) return;
         _disposed = true;
         Flush();
+        SaveHistoryReplay();
+    }
+
+    private void SaveHistoryReplay()
+    {
+        if (_historyReplaySaved || !File.Exists(_targetRecordFilePath))
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(_historyReplayDir);
+
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmssfff");
+            string historyReplayPath = Path.Combine(_historyReplayDir, $"{timestamp}.dat");
+            int duplicateIndex = 1;
+            while (File.Exists(historyReplayPath))
+            {
+                historyReplayPath = Path.Combine(_historyReplayDir, $"{timestamp}_{duplicateIndex}.dat");
+                duplicateIndex++;
+            }
+
+            File.Copy(_targetRecordFilePath, historyReplayPath);
+            _historyReplaySaved = true;
+            Log.Information("Replay history saved to {Path}", historyReplayPath);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to save replay history");
+        }
     }
 }
 
 public record GameResult
 {
     [JsonPropertyName("scores")]
-    public Dictionary<string, int> Scores { get; init; } = new();
+    public Dictionary<string, long> Scores { get; init; } = new();
 }
