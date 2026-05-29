@@ -11,6 +11,7 @@ from websockets.asyncio.client import ClientConnection
 
 from .message import (
     JsonObject,
+    parse_day_settlement,
     parse_error_message,
     parse_game_state,
     parse_inbound_message,
@@ -23,6 +24,7 @@ from .message import (
     parse_trade_notification,
 )
 from .models import (
+    DaySettlement,
     GameState,
     MarketState,
     News,
@@ -53,6 +55,7 @@ class Agent:  # pylint: disable=too-many-instance-attributes
         self.player_state = PlayerState()
         self.latest_news: Optional[News] = None
         self.strategy_options: Optional[StrategyOptions] = None
+        self.latest_day_settlement: Optional[DaySettlement] = None
 
     async def connect(self) -> None:
         """Open the websocket connection and send HELLO."""
@@ -206,6 +209,9 @@ class Agent:  # pylint: disable=too-many-instance-attributes
     async def on_skill_effect(self, effect: SkillEffect) -> None:
         """Handle a skill effect broadcast."""
 
+    async def on_day_settlement(self, settlement: DaySettlement) -> None:
+        """Handle a monthly settlement broadcast."""
+
     async def on_error(self, code: int, message: str) -> None:
         """Handle an error message from the server."""
 
@@ -230,8 +236,12 @@ class Agent:  # pylint: disable=too-many-instance-attributes
             self.latest_news = parse_news(data)
         elif msg_type == "STRATEGY_OPTIONS":
             self.strategy_options = parse_strategy_options(data)
+        elif msg_type == "DAY_SETTLEMENT":
+            self.latest_day_settlement = parse_day_settlement(data)
 
-    async def _dispatch(self, msg_type: str, data: JsonObject) -> None:
+    async def _dispatch(  # pylint: disable=too-many-branches
+        self, msg_type: str, data: JsonObject
+    ) -> None:
         """Invoke the public callback that matches an inbound message type."""
 
         if msg_type == "GAME_STATE":
@@ -252,6 +262,9 @@ class Agent:  # pylint: disable=too-many-instance-attributes
             await self.on_trade(parse_trade_notification(data))
         elif msg_type == "SKILL_EFFECT":
             await self.on_skill_effect(parse_skill_effect(data))
+        elif msg_type == "DAY_SETTLEMENT":
+            if self.latest_day_settlement is not None:
+                await self.on_day_settlement(self.latest_day_settlement)
         elif msg_type == "ERROR":
             code, message = parse_error_message(data)
             await self.on_error(code, message)

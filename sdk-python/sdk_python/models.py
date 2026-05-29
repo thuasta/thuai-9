@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 class GameStage(Enum):
@@ -161,3 +161,32 @@ class SkillEffect:
     source_player_id: int = -1
     target_player_id: Optional[int] = None
     description: str = ""
+
+
+@dataclass
+class DaySettlementPlayer:  # pylint: disable=too-many-instance-attributes
+    """Per-player portfolio snapshot reported at monthly settlement."""
+
+    player_id: int = -1
+    nav: int = 0
+    mora: int = 0
+    gold: int = 0
+    frozen_mora: int = 0
+    frozen_gold: int = 0
+    locked_gold: int = 0
+    trade_count: int = 0
+    active_cards: List[str] = field(default_factory=lambda: [])
+
+
+@dataclass
+class DaySettlement:  # pylint: disable=too-many-instance-attributes
+    """Monthly settlement broadcast with winner and cumulative standings."""
+
+    day: int = 0
+    month: int = 0
+    winner_player_id: int = -1
+    reason: str = ""
+    players: List[DaySettlementPlayer] = field(default_factory=lambda: [])
+    cumulative_navs: Dict[int, int] = field(default_factory=lambda: {})
+    final_bonus_winner_player_id: int = -1
+    final_bonus_points: int = 0

@@ -16,6 +16,7 @@ from sdk_python.message import (
     _require_object_list,
     _require_str,
     _require_str_list,
+    parse_day_settlement,
     parse_error_message,
     parse_game_state,
     parse_inbound_message,
@@ -102,6 +103,9 @@ class RecordingAgent(Agent):
 
     async def on_skill_effect(self, effect) -> None:  # type: ignore[override]
         self.events.append(("skill", effect.skill_name))
+
+    async def on_day_settlement(self, settlement) -> None:  # type: ignore[override]
+        self.events.append(("settlement", settlement.winner_player_id))
 
     async def on_error(self, code: int, message: str) -> None:  # type: ignore[override]
         self.events.append(("error", code, message))
@@ -251,6 +255,33 @@ class ProtocolParserTests(unittest.TestCase):
         self.assertIsNone(options.risk_control)
         self.assertEqual("Flash", options.fin_tech.name)
 
+    def test_parse_strategy_options_tolerates_omitted_null_cards(self) -> None:
+        """Omitted optional cards should parse to None, not raise KeyError.
+
+        The server serializes with WhenWritingNull, so a null risk-control or
+        fin-tech card is omitted from the payload entirely.
+        """
+
+        options = parse_strategy_options(
+            {
+                "infrastructure": {
+                    "name": "Bridge",
+                    "description": "Boosts capacity",
+                    "category": "Infrastructure",
+                },
+            }
+        )
+
+        self.assertEqual("Bridge", options.infrastructure.name)
+        self.assertIsNone(options.risk_control)
+        self.assertIsNone(options.fin_tech)
+
+    def test_optional_helpers_return_none_for_missing_keys(self) -> None:
+        """Optional readers should treat an absent key like a null value."""
+
+        self.assertIsNone(_optional_str({}, "value"))
+        self.assertIsNone(_optional_object({}, "value"))
+
     def test_parse_additional_protocol_messages(self) -> None:
         """Remaining wire messages should parse into the documented models."""
 
@@ -305,6 +336,83 @@ class ProtocolParserTests(unittest.TestCase):
         )
         self.assertEqual("TRADE_NOTIFICATION", msg_type)
         self.assertEqual(88, payload["orderId"])
+
+    def test_parse_day_settlement_matches_wire_fields(self) -> None:
+        """Day-settlement parsing should mirror the server broadcast shape."""
+
+        settlement = parse_day_settlement(
+            {
+                "messageType": "DAY_SETTLEMENT",
+                "day": 3,
+                "month": 3,
+                "winnerPlayerId": 0,
+                "reason": "Highest NAV",
+                "players": [
+                    {
+                        "playerId": 0,
+                        "nav": 2999000,
+                        "mora": 1500000,
+                        "gold": 1499,
+                        "frozenMora": 0,
+                        "frozenGold": 0,
+                        "lockedGold": 0,
+                        "tradeCount": 42,
+                        "activeCards": ["Bridge", "Firewall"],
+                    },
+                    {
+                        "playerId": 1,
+                        "nav": 2000000,
+                        "mora": 2000000,
+                        "gold": 0,
+                        "frozenMora": 0,
+                        "frozenGold": 0,
+                        "lockedGold": 0,
+                        "tradeCount": 7,
+                        "activeCards": [],
+                    },
+                ],
+                "cumulativeNavs": {"0": 8500000, "1": 6000000},
+                "finalBonusWinnerPlayerId": 0,
+                "finalBonusPoints": 1000,
+            }
+        )
+
+        self.assertEqual(3, settlement.day)
+        self.assertEqual(3, settlement.month)
+        self.assertEqual(0, settlement.winner_player_id)
+        self.assertEqual("Highest NAV", settlement.reason)
+        self.assertEqual(0, settlement.final_bonus_winner_player_id)
+        self.assertEqual(1000, settlement.final_bonus_points)
+
+        self.assertEqual({0: 8500000, 1: 6000000}, settlement.cumulative_navs)
+
+        self.assertEqual(2, len(settlement.players))
+        leader = settlement.players[0]
+        self.assertEqual(0, leader.player_id)
+        self.assertEqual(2999000, leader.nav)
+        self.assertEqual(1500000, leader.mora)
+        self.assertEqual(1499, leader.gold)
+        self.assertEqual(42, leader.trade_count)
+        self.assertEqual(["Bridge", "Firewall"], leader.active_cards)
+        self.assertEqual([], settlement.players[1].active_cards)
+
+    def test_parse_day_settlement_tolerates_omitted_cumulative_navs(self) -> None:
+        """A null cumulativeNavs map should decode to an empty mapping."""
+
+        settlement = parse_day_settlement(
+            {
+                "day": 1,
+                "month": 1,
+                "winnerPlayerId": -1,
+                "reason": "",
+                "players": [],
+                "finalBonusWinnerPlayerId": -1,
+                "finalBonusPoints": 0,
+            }
+        )
+
+        self.assertEqual({}, settlement.cumulative_navs)
+        self.assertEqual([], settlement.players)
 
     def test_message_helpers_reject_invalid_types(self) -> None:
         """Validation helpers should raise on type mismatches."""
@@ -499,6 +607,31 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
             ),
             json.dumps(
                 {
+                    "messageType": "DAY_SETTLEMENT",
+                    "day": 1,
+                    "month": 1,
+                    "winnerPlayerId": 0,
+                    "reason": "Highest NAV",
+                    "players": [
+                        {
+                            "playerId": 0,
+                            "nav": 2000000,
+                            "mora": 2000000,
+                            "gold": 0,
+                            "frozenMora": 0,
+                            "frozenGold": 0,
+                            "lockedGold": 0,
+                            "tradeCount": 1,
+                            "activeCards": [],
+                        }
+                    ],
+                    "cumulativeNavs": {"0": 2000000},
+                    "finalBonusWinnerPlayerId": 0,
+                    "finalBonusPoints": 1000,
+                }
+            ),
+            json.dumps(
+                {
                     "messageType": "ERROR",
                     "errorCode": 404,
                     "message": "boom",
@@ -539,6 +672,7 @@ class ProtocolActionTests(unittest.IsolatedAsyncioTestCase):
                 ("strategy", "Bridge"),
                 ("trade", 11),
                 ("skill", "Hedge"),
+                ("settlement", 0),
                 ("error", 404, "boom"),
             ],
             agent.events,

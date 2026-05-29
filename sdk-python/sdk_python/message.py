@@ -6,6 +6,8 @@ from typing import List, Dict, Optional, TypeAlias, cast
 
 from .models import (
     CardOption,
+    DaySettlement,
+    DaySettlementPlayer,
     GameState,
     MarketState,
     News,
@@ -61,7 +63,7 @@ def _require_list(data: JsonObject, key: str) -> List[object]:
 def _optional_str(data: JsonObject, key: str) -> Optional[str]:
     """Read an optional string field and validate its type if present."""
 
-    value = data[key]
+    value = data.get(key)
     if value is None:
         return None
     if not isinstance(value, str):
@@ -74,7 +76,7 @@ def _optional_str(data: JsonObject, key: str) -> Optional[str]:
 def _optional_object(data: JsonObject, key: str) -> Optional[JsonObject]:
     """Read an optional object field and validate its type if present."""
 
-    value = data[key]
+    value = data.get(key)
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -275,6 +277,50 @@ def parse_skill_effect(data: JsonObject) -> SkillEffect:
         _require_int(data, "sourcePlayerId"),
         _optional_int(data, "targetPlayerId"),
         _require_str(data, "description"),
+    )
+
+
+def parse_day_settlement(data: JsonObject) -> DaySettlement:
+    """Convert a wire-format day-settlement payload into a SDK model."""
+
+    players = [
+        DaySettlementPlayer(
+            player_id=_require_int(player, "playerId"),
+            nav=_require_int(player, "nav"),
+            mora=_require_int(player, "mora"),
+            gold=_require_int(player, "gold"),
+            frozen_mora=_require_int(player, "frozenMora"),
+            frozen_gold=_require_int(player, "frozenGold"),
+            locked_gold=_require_int(player, "lockedGold"),
+            trade_count=_require_int(player, "tradeCount"),
+            active_cards=_require_str_list(player, "activeCards"),
+        )
+        for player in _require_object_list(data, "players")
+    ]
+
+    # cumulativeNavs is a JSON object whose keys are player ids serialized as
+    # strings (System.Text.Json emits dictionary keys as strings); decode them
+    # back to int so callers index by player id.
+    cumulative_navs: Dict[int, int] = {}
+    navs = _optional_object(data, "cumulativeNavs")
+    if navs is not None:
+        for key, value in navs.items():
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(
+                    f"Field 'cumulativeNavs[{key}]' must be int, "
+                    f"got {type(value).__name__}"
+                )
+            cumulative_navs[int(key)] = value
+
+    return DaySettlement(
+        day=_require_int(data, "day"),
+        month=_require_int(data, "month"),
+        winner_player_id=_require_int(data, "winnerPlayerId"),
+        reason=_require_str(data, "reason"),
+        players=players,
+        cumulative_navs=cumulative_navs,
+        final_bonus_winner_player_id=_require_int(data, "finalBonusWinnerPlayerId"),
+        final_bonus_points=_require_int(data, "finalBonusPoints"),
     )
 
 
