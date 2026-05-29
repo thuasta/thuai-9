@@ -14,7 +14,11 @@ import {
 } from "./connection.js";
 
 const MAX_EVENTS = 160;
-const MAX_MARKET_HISTORY = 8000;
+export const MAX_MARKET_HISTORY = 8000;
+// Each snapshot contributes at most one candle, so capping the live accumulator
+// at the same bound as market.history keeps it consistent with a rebuild from
+// the trimmed history (setCandleOptions) instead of drifting unbounded.
+const MAX_CANDLES = MAX_MARKET_HISTORY;
 const MAX_NEWS = 80;
 const VALID_VIEWS = new Set(["main", "logs", "rankings", "info", "debug", "server-debug"]);
 const AUTO_OPEN_SETTLEMENT_MODAL = false;
@@ -90,6 +94,7 @@ export function createInitialState(route = {}) {
     news: {
       items: [],
       results: {},
+      arrivalCount: 0,
     },
     events: [],
     settlement: null,
@@ -135,13 +140,14 @@ export function setActiveView(state, view) {
 }
 
 export function markNewsAsRead(state) {
-  state.ui.readNewsCount = state.news.items.length;
+  state.ui.readNewsCount = state.news.arrivalCount;
 }
 
 export function resetUiCollections(state) {
   state.events = [];
   state.news.items = [];
   state.news.results = {};
+  state.news.arrivalCount = 0;
   state.dailySummaries = [];
   state.playerSummaries = {};
   state.playerDirectory = emptyPlayerDirectory();
@@ -188,7 +194,9 @@ export function setReplayPatch(state, patch) {
 }
 
 export function unreadNewsCount(state) {
-  return Math.max(0, state.news.items.length - state.ui.readNewsCount);
+  // Derived from a monotonic arrival counter rather than the capped list length,
+  // so the badge keeps counting after the list reaches MAX_NEWS and drops oldest.
+  return Math.max(0, state.news.arrivalCount - state.ui.readNewsCount);
 }
 
 export function setCandleOptions(state, options) {
@@ -494,6 +502,10 @@ function upsertNews(state, message) {
 
   if (existingIndex >= 0) {
     state.news.items.splice(existingIndex, 1);
+  } else {
+    // Only a genuinely new newsId counts as an arrival for the unread badge;
+    // re-broadcasts of an already-seen item must not inflate it.
+    state.news.arrivalCount += 1;
   }
   state.news.items.unshift(next);
   if (state.news.items.length > MAX_NEWS) {
@@ -533,7 +545,11 @@ function appendMarketSnapshot(state) {
   }
 
   ingestMarketSnapshot(state.market.candleAccumulator, snapshot);
-  state.market.candles = state.market.candleAccumulator.candles;
+  const candles = state.market.candleAccumulator.candles;
+  if (candles.length > MAX_CANDLES) {
+    candles.splice(0, candles.length - MAX_CANDLES);
+  }
+  state.market.candles = candles;
 }
 
 function normalizePlayerState(message) {
