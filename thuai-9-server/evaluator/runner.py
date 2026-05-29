@@ -26,10 +26,24 @@ class MatchAgent:
     token: str
 
 
+def _redact_token(token: str) -> str:
+    # player_token is the live-server auth credential; never emit it in clear to
+    # logs. Show only a short prefix so operators can still correlate entries.
+    if not token:
+        return "<empty>"
+    return f"{token[:2]}***"
+
+
 def _spawn_agent(client, match_id: int, agent: MatchAgent):
     if not agent.image_ref:
         raise ValueError(f"submission {agent.submission_id} missing image reference")
 
+    # The agent runs untrusted contestant code. mem/cpu are capped; pids_limit
+    # caps the process count so a fork bomb can't evade the memory cap. NOTE for
+    # maintainers: this container shares live_server_network to reach the live
+    # game server, which also exposes egress / other services on that network —
+    # isolating agents onto a dedicated internal-only network with the live
+    # server alone is a hardening follow-up, intentionally not done here.
     return client.containers.run(
         image=agent.image_ref,
         environment={
@@ -39,6 +53,7 @@ def _spawn_agent(client, match_id: int, agent: MatchAgent):
         network=settings.live_server_network,
         mem_limit="256m",
         nano_cpus=500_000_000,
+        pids_limit=512,
         labels={
             MANAGED_AGENT_LABEL: MANAGED_AGENT_VALUE,
             "thuai9.match_id": str(match_id),
@@ -247,7 +262,7 @@ def run_match(
                 match_id,
                 agent.submission_id,
                 agent.team_id,
-                agent.token,
+                _redact_token(agent.token),
             )
 
         expected_tokens = {agent.token for agent in agents}
@@ -276,12 +291,22 @@ def run_match(
             time.sleep(POLL_INTERVAL)
 
         latest_scores = _read_result(result_path) or {}
-        missing = sorted(expected_tokens - latest_scores.keys())
+        # Report missing/received results by submission id, never by raw
+        # player_token (the token is the live-server auth credential and this
+        # error_log is persisted and shown in the portal).
+        missing_subs = sorted(
+            str(token_to_submission.get(t, "?"))
+            for t in (expected_tokens - latest_scores.keys())
+        )
+        received_subs = {
+            token_to_submission.get(t, "?"): score
+            for t, score in latest_scores.items()
+        }
         log_suffix = _collect_agent_logs(containers)
         agent_logs = _snapshot_logs()
-        details = f"比赛超时，缺少结果 token: {', '.join(missing) if missing else '无'}"
-        if latest_scores:
-            details += f"\n已收到结果: {latest_scores}"
+        details = f"比赛超时，缺少结果 submission: {', '.join(missing_subs) if missing_subs else '无'}"
+        if received_subs:
+            details += f"\n已收到结果: {received_subs}"
         if log_suffix:
             details += f"\n\n{log_suffix}"
         return None, details, agent_logs

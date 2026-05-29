@@ -16,6 +16,12 @@ router = APIRouter()
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024       # 10 MB
 MAX_SUBMISSION_NAME_CHARS = 64
+UPLOAD_CHUNK_BYTES = 1024 * 1024          # read the body 1 MB at a time
+# Keep only the most recent N uploaded zips per team on disk; older zips are
+# reclaimed on each successful upload so the shared submission-data volume can't
+# be filled by repeated uploads. DB rows + compile artifacts are untouched —
+# only the now-redundant source zips are removed.
+MAX_RETAINED_ZIPS_PER_TEAM = 5
 
 
 def _normalize_submission_name(
@@ -129,10 +135,6 @@ async def upload_submission(
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="只接受 .zip 文件")
 
-    data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="文件超过 10 MB 限制")
-
     submission = Submission(
         team_id=team.id,
         name="上传中代码",
@@ -147,9 +149,24 @@ async def upload_submission(
     submission.name = _normalize_submission_name(name, file.filename, submission.id)
     dest_path = os.path.join(settings.upload_dir, f"{submission.id}.zip")
     os.makedirs(settings.upload_dir, exist_ok=True)
+    # Stream the body to disk in bounded chunks so an oversized upload can't be
+    # buffered into memory wholesale before the size check runs.
+    written = 0
     try:
         with open(dest_path, "wb") as f:
-            f.write(data)
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="文件超过 10 MB 限制")
+                f.write(chunk)
+    except HTTPException:
+        await db.rollback()
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        raise
     except OSError as exc:
         await db.rollback()
         if os.path.exists(dest_path):
@@ -159,7 +176,37 @@ async def upload_submission(
     await db.commit()
     await db.refresh(submission)
 
+    await _prune_old_team_zips(team.id, db, keep_zip_path=dest_path)
+
     return submission
+
+
+async def _prune_old_team_zips(
+    team_id: int,
+    db: AsyncSession,
+    keep_zip_path: str,
+) -> None:
+    """Delete the source zips of this team's older submissions, keeping only the
+    most recent ``MAX_RETAINED_ZIPS_PER_TEAM`` on disk. The just-uploaded zip is
+    always retained; DB rows and compile artifacts are left intact."""
+    id_result = await db.execute(
+        select(Submission.id)
+        .where(Submission.team_id == team_id)
+        .order_by(Submission.id.desc())
+        .offset(MAX_RETAINED_ZIPS_PER_TEAM)
+    )
+    for (old_id,) in id_result.all():
+        old_path = os.path.join(settings.upload_dir, f"{old_id}.zip")
+        if old_path == keep_zip_path:
+            continue
+        try:
+            os.remove(old_path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # A zip we can't reclaim now will be retried on the next upload;
+            # don't fail the request the team just succeeded at.
+            pass
 
 
 @router.get("/", response_model=list[SubmissionOut])
