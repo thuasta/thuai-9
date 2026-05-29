@@ -60,6 +60,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # submission-api owns the authoritative schema (it models every table incl.
+      # teams + foreign keys); start it first so its create_all wins the bootstrap
+      # and the evaluator's fallback create_all is a no-op on existing tables.
+      submission-api:
+        condition: service_started
     networks:
       - internal
 
