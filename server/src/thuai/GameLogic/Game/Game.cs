@@ -25,12 +25,20 @@ public partial class Game
     public StrategyCardManager CardManager { get; } = new();
     public MonthSettlementResult? LatestSettlement { get; private set; }
     public bool HasPendingSettlementNotification { get; private set; }
+    public bool HasPendingStrategyOptions { get; private set; }
     public Dictionary<string, long> CumulativeNavs { get; } = new();
+
+    /// <summary>Configured number of trading days (ticks) in one month.</summary>
+    public int TradingDayTicks => _settings.TradingDayTicks;
 
     private int _waitingTicksRemaining;
     private int _strategyTicksRemaining;
     private bool _settlementProcessed;
     private readonly Dictionary<string, bool> _playerStrategySelected = new();
+    // Number of months each token has actually been settled into CumulativeNavs.
+    // Used so a late joiner's net income subtracts the baseline only for the
+    // months they actually played, not the whole game's month count.
+    private readonly Dictionary<string, int> _monthsSettled = new();
 
     public Game(GameSettings settings)
     {
@@ -47,8 +55,10 @@ public partial class Game
         CurrentTradingDay = null;
         LatestSettlement = null;
         HasPendingSettlementNotification = false;
+        HasPendingStrategyOptions = false;
         _queuedPlayerJoins.Clear();
         _queuedPlayerRemovals.Clear();
+        _monthsSettled.Clear();
         CardManager.Reset();
         foreach (var token in Players.Keys.ToList())
         {
@@ -128,6 +138,12 @@ public partial class Game
         }
 
         Stage = GameStage.StrategySelection;
+        HasPendingStrategyOptions = true;
+    }
+
+    public void MarkStrategyOptionsPublished()
+    {
+        HasPendingStrategyOptions = false;
     }
 
     private void TickStrategySelection()
@@ -182,6 +198,7 @@ public partial class Game
                 foreach (var (token, nav) in navs)
                 {
                     CumulativeNavs[token] = CumulativeNavs.GetValueOrDefault(token, 0) + nav;
+                    _monthsSettled[token] = _monthsSettled.GetValueOrDefault(token, 0) + 1;
                 }
 
                 LatestSettlement = DetermineMonthResult(navs);
@@ -287,7 +304,10 @@ public partial class Game
             + (long)_settings.InitialGold * _settings.InitialGoldPrice;
         foreach (var (token, cumulative) in CumulativeNavs)
         {
-            long netIncome = cumulative - baselinePerMonth * CurrentMonthNumber;
+            // Subtract the baseline once per month the player actually played —
+            // a late joiner has fewer settled months than the global month count.
+            int monthsPlayed = _monthsSettled.GetValueOrDefault(token, 0);
+            long netIncome = cumulative - baselinePerMonth * monthsPlayed;
             Scoreboard[token] = (int)Math.Clamp(netIncome, int.MinValue, int.MaxValue);
         }
 

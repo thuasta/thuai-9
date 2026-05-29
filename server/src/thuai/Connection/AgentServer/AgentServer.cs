@@ -47,6 +47,10 @@ public partial class AgentServer
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationTokenSources = new();
 
     private const int MaxMessageQueueSize = 11;
+    // Upper bound on a single socket's outbound queue. State is broadcast every
+    // tick, so a stalled/non-reading client's queue would grow without bound;
+    // beyond this many pending messages the oldest are dropped.
+    private const int MaxSendQueueSize = 256;
     private const int MessageProcessingInterval = 10; // ms
 
     public void Start()

@@ -52,14 +52,14 @@ public partial class AgentServer
         {
             if (socketToken == token && _socketMessageSendingQueue.TryGetValue(socketId, out var queue))
             {
-                queue.Enqueue(message);
+                EnqueueBounded(socketId, queue, message);
             }
         }
         foreach (var (socketId, role) in _socketRoles)
         {
             if (role == SocketRole.Admin && _socketMessageSendingQueue.TryGetValue(socketId, out var queue))
             {
-                queue.Enqueue(message);
+                EnqueueBounded(socketId, queue, message);
             }
         }
     }
@@ -75,7 +75,7 @@ public partial class AgentServer
                 continue;
             if (_socketMessageSendingQueue.TryGetValue(socketId, out var queue))
             {
-                queue.Enqueue(message);
+                EnqueueBounded(socketId, queue, message);
             }
         }
     }
@@ -91,8 +91,22 @@ public partial class AgentServer
                 continue;
             if (_socketMessageSendingQueue.TryGetValue(socketId, out var queue))
             {
-                queue.Enqueue(message);
+                EnqueueBounded(socketId, queue, message);
             }
         }
+    }
+
+    // Enqueue a message for a socket while bounding the queue length. A client
+    // that stops reading (stalled or malicious) would otherwise let its send
+    // queue — fed every tick — grow without bound and exhaust server memory.
+    // When full we drop the oldest queued message: the freshest game state
+    // supersedes stale snapshots anyway.
+    private static void EnqueueBounded(System.Guid socketId, System.Collections.Concurrent.ConcurrentQueue<Message> queue, Message message)
+    {
+        while (queue.Count >= MaxSendQueueSize && queue.TryDequeue(out _))
+        {
+            // drop oldest
+        }
+        queue.Enqueue(message);
     }
 }

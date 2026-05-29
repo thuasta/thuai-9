@@ -28,6 +28,12 @@ public class MatchEngine
         if (price <= 0 || quantity <= 0)
             return null;
 
+        // Reject orders whose notional would overflow Int64. A wrapped-negative
+        // notional would slip past the affordability check below and let a buy
+        // freeze a negative amount, fabricating Mora. price/quantity are positive here.
+        if (price > long.MaxValue / quantity)
+            return null;
+
         Player? player = null;
         if (playerToken != SystemToken)
         {

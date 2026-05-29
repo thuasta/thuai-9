@@ -1,7 +1,7 @@
 {
   "server": {
     "port": 14514,
-    "acceptAnyToken": true
+    "acceptAnyToken": false
   },
   "token": {
     "loadTokenFromEnv": true,
@@ -28,10 +28,8 @@
     "initialGoldPrice": 1000,
     "defaultNetworkDelay": 1,
     "defaultFeeRate": 0.0002,
-    "maxOrdersPerTick": 2,
     "maxImmediateOrdersPerDay": 1,
     "maxRestingOrdersPerDay": 1,
-    "maxReportsPerNews": 1,
     "newsIntervalMin": 200,
     "newsIntervalMax": 400,
     "researchWindowTicks": 2,
