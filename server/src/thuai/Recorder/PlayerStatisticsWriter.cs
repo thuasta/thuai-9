@@ -152,7 +152,7 @@ public sealed record PlayerStatisticsSnapshot
     public bool RemovedFromGame { get; init; }
 
     [JsonPropertyName("score")]
-    public int Score { get; init; }
+    public long Score { get; init; }
 
     [JsonPropertyName("cumulativeNav")]
     public long CumulativeNav { get; init; }

@@ -564,6 +564,7 @@ public class PlayerTests
         Assert.Equal(0.0002, player.TransactionFeeRate);
         Assert.Equal(2, player.MaxOrdersPerTick);
         Assert.Equal(1, player.MaxReportsPerTick);
+        Assert.Equal(1, player.MaxReportsPerNews);
         Assert.Equal(0, player.OrdersSentThisTick);
         Assert.Equal(0, player.ReportsSentThisTick);
         Assert.Equal(0, player.TotalTradeCount);
@@ -689,6 +690,23 @@ public class PlayerTests
         player.ReportsSentThisTick = 1;
         Assert.False(player.CanSubmitReport());
     }
+
+    [Fact]
+    public void CanSubmitReport_PerNewsLimitIsConfigurable()
+    {
+        var player = new Player("p1", 0)
+        {
+            MaxReportsPerNews = 2
+        };
+
+        Assert.True(player.CanSubmitReport(7));
+
+        player.MarkReportSubmitted(7);
+        Assert.True(player.CanSubmitReport(7));
+
+        player.MarkReportSubmitted(7);
+        Assert.False(player.CanSubmitReport(7));
+    }
 }
 
 #endregion
@@ -732,6 +750,17 @@ public class NewsSystemTests
             // If rng happened to set NextNewsTick to 0, it still succeeds
             Assert.NotNull(resultAt0);
         }
+    }
+
+    [Fact]
+    public void Tick_UsesConfiguredNewsSchedule()
+    {
+        var newsSystem = new NewsSystem(researchWindow: 50, scheduledNewsTicks: [2, 4]);
+
+        Assert.Null(newsSystem.Tick(1));
+        Assert.NotNull(newsSystem.Tick(2));
+        Assert.Null(newsSystem.Tick(3));
+        Assert.NotNull(newsSystem.Tick(4));
     }
 
     [Fact]

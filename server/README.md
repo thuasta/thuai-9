@@ -24,7 +24,7 @@ The server will get all available tokens by reading from environment variables, 
 
 Then server will get all possible tokens from `TOKENS` file using a comma as delimiter.
 
-After game is finished, a replay file and a result file are generated, OVERWRITING the previous one!!! If you still need previous
+After a game is finished, the latest replay is written to `data/replay.dat`, and a timestamped history copy is also written to `data/history-replay/`.
 
 
 ## Quick Start with Code (Some Information is Outdated!!)
@@ -91,8 +91,12 @@ On first launch, the server creates `config/config.json` with default settings:
     "defaultFeeRate": 0.0002,
     "maxImmediateOrdersPerDay": 1,
     "maxRestingOrdersPerDay": 1,
+    "maxReportsPerNews": 1,
+    "maxReportsPerTick": 1,
     "newsIntervalMin": 200,
     "newsIntervalMax": 400,
+    "researchEnabled": true,
+    "researchNewsScheduleTicks": [1, 11, 21],
     "researchWindowTicks": 50,
     "researchSettlementDelay": 100,
     "baseResearchReward": 10000,
@@ -248,6 +252,7 @@ After a game completes, the server writes:
 | File                      | Description                                                 |
 | ------------------------- | ----------------------------------------------------------- |
 | `data/replay.dat`         | ZIP archive with per-tick game state snapshots (JSON)       |
+| `data/history-replay/`    | Timestamped replay backups (e.g. `20260529_143010123.dat`) |
 | `data/result.json`        | Final scoreboard `{"scores": {"player1": 2, "player2": 1}}` |
 | `logs/thuai-YYYYMMDD.log` | Server logs (if file logging enabled)                       |
 

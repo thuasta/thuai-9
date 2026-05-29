@@ -44,8 +44,10 @@ public class Player
     public int ReportsSentThisTick { get; set; }
     public int MaxOrdersPerTick { get; set; }
     public int MaxReportsPerTick { get; set; }
+    public int MaxReportsPerNews { get; set; }
 
     public HashSet<int> ReportedNewsIdsThisMonth { get; } = new();
+    private readonly Dictionary<int, int> _reportSubmissionCountsThisMonth = new();
 
     public bool IsImmune { get; set; }
     public int ImmuneUntilTick { get; set; }
@@ -87,6 +89,7 @@ public class Player
             MaxRestingOrdersPerDay = _baseRestingOrdersPerDay;
             MaxOrdersPerTick = _baseImmediateOrdersPerDay + _baseRestingOrdersPerDay;
             MaxReportsPerTick = 1;
+            MaxReportsPerNews = 1;
             ImmediateOrdersUsedToday = 0;
             RestingOrdersUsedToday = 0;
             BonusImmediateOrdersToday = 0;
@@ -96,6 +99,7 @@ public class Player
             PendingCheapInsiderCorruption = false;
             InsiderPriorityNewsDay = 0;
             ReportedNewsIdsThisMonth.Clear();
+            _reportSubmissionCountsThisMonth.Clear();
             IsImmune = false;
             ImmuneUntilTick = 0;
             ProtectedMidPrice = 0;
@@ -132,7 +136,7 @@ public class Player
         RestingOrdersUsedToday < MaxRestingOrdersPerDay;
 
     public bool CanSubmitReport(int newsId) =>
-        !ReportedNewsIdsThisMonth.Contains(newsId);
+        _reportSubmissionCountsThisMonth.GetValueOrDefault(newsId) < MaxReportsPerNews;
 
     public bool CanPlaceOrder() => OrdersSentThisTick < MaxOrdersPerTick;
 
@@ -152,8 +156,15 @@ public class Player
 
     public void MarkReportSubmitted(int newsId)
     {
+        _reportSubmissionCountsThisMonth[newsId] = _reportSubmissionCountsThisMonth.GetValueOrDefault(newsId) + 1;
         ReportedNewsIdsThisMonth.Add(newsId);
         ReportsSentThisTick++;
+    }
+
+    public void ConfigureReportLimits(int maxReportsPerTick, int maxReportsPerNews)
+    {
+        MaxReportsPerTick = Math.Max(0, maxReportsPerTick);
+        MaxReportsPerNews = Math.Max(0, maxReportsPerNews);
     }
 
     public int ConsumeNextOrderExtraDelayDays()

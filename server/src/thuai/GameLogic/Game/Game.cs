@@ -1,5 +1,6 @@
 namespace Thuai.GameLogic;
 
+using System.Numerics;
 using Thuai.Utility;
 using Thuai.GameLogic.StrategyCards;
 
@@ -170,7 +171,11 @@ public partial class Game
             _settings.ResearchSettlementDelay,
             _settings.BaseResearchReward,
             _settings.NpcOrdersPerTick,
-            CurrentMonthNumber
+            CurrentMonthNumber,
+            _settings.ResearchEnabled,
+            _settings.MaxReportsPerTick,
+            _settings.MaxReportsPerNews,
+            _settings.ResearchNewsScheduleTicks
         );
         CurrentTradingDay.Initialize();
 
@@ -197,7 +202,7 @@ public partial class Game
                 var navs = CurrentTradingDay.CalculateSettlement();
                 foreach (var (token, nav) in navs)
                 {
-                    CumulativeNavs[token] = CumulativeNavs.GetValueOrDefault(token, 0) + nav;
+                    CumulativeNavs[token] = ClampToInt64((BigInteger)CumulativeNavs.GetValueOrDefault(token, 0) + nav);
                     _monthsSettled[token] = _monthsSettled.GetValueOrDefault(token, 0) + 1;
                 }
 
@@ -307,8 +312,8 @@ public partial class Game
             // Subtract the baseline once per month the player actually played —
             // a late joiner has fewer settled months than the global month count.
             int monthsPlayed = _monthsSettled.GetValueOrDefault(token, 0);
-            long netIncome = cumulative - baselinePerMonth * monthsPlayed;
-            Scoreboard[token] = (int)Math.Clamp(netIncome, int.MinValue, int.MaxValue);
+            long netIncome = ClampToInt64((BigInteger)cumulative - (BigInteger)baselinePerMonth * monthsPlayed);
+            Scoreboard[token] = netIncome;
         }
 
         // The "final bonus" winner is reported for the settlement display only;
@@ -331,5 +336,14 @@ public partial class Game
             reason,
             finalBonusWinnerToken,
             FinalBonusPoints: 0);
+    }
+
+    private static long ClampToInt64(BigInteger value)
+    {
+        if (value > long.MaxValue)
+            return long.MaxValue;
+        if (value < long.MinValue)
+            return long.MinValue;
+        return (long)value;
     }
 }

@@ -16,6 +16,12 @@ GAME_TIMEOUT_SECONDS = 360
 POLL_INTERVAL = 1
 MANAGED_AGENT_LABEL = "thuai9.managed"
 MANAGED_AGENT_VALUE = "evaluator-agent"
+LIVE_SERVER_OUTPUT_FILES = (
+    "result.json",
+    "replay.dat",
+    "player-stats.json",
+    "stat.dat",
+)
 
 
 @dataclass(frozen=True)
@@ -65,24 +71,79 @@ def _spawn_agent(client, match_id: int, agent: MatchAgent):
 
 
 def _prepare_live_server_config_dir() -> str:
-    config_dir = os.path.join(settings.match_data_dir, "live-server-config")
+    config_dir = settings.live_server_config_dir
     os.makedirs(config_dir, exist_ok=True)
     config_path = os.path.join(config_dir, "config.json")
+    legacy_config_path = os.path.join(settings.match_data_dir, "live-server-config", "config.json")
 
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "game": {
-                    # Allow arena matches to start even when only one
-                    # dispatched ready submission is available.
-                    "minimumPlayerCount": 1,
-                }
-            },
-            f,
-            ensure_ascii=False,
-        )
+    if not os.path.isfile(config_path):
+        config_payload = {
+            "game": {
+                # Allow arena matches to start even when only one
+                # dispatched ready submission is available.
+                "minimumPlayerCount": 1,
+            }
+        }
+
+        if os.path.isfile(legacy_config_path):
+            try:
+                with open(legacy_config_path, encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    config_payload = loaded
+            except (OSError, json.JSONDecodeError):
+                logger.warning("Failed to load legacy live server config from %s", legacy_config_path)
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_payload, f, ensure_ascii=False)
 
     return config_dir
+
+
+def _prepare_live_server_data_dir() -> str:
+    data_dir = settings.live_server_data_dir
+    os.makedirs(data_dir, exist_ok=True)
+
+    for filename in LIVE_SERVER_OUTPUT_FILES:
+        try:
+            os.remove(os.path.join(data_dir, filename))
+        except FileNotFoundError:
+            pass
+
+    return data_dir
+
+
+def _resolve_host_path(client, container_path: str) -> str:
+    container = client.containers.get(settings.evaluator_container_name)
+    mounts = container.attrs.get("Mounts", [])
+    normalized_path = os.path.normpath(container_path)
+
+    best_source: str | None = None
+    best_destination: str | None = None
+    best_length = -1
+
+    for mount in mounts:
+        destination = mount.get("Destination")
+        source = mount.get("Source")
+        if not destination or not source:
+            continue
+
+        normalized_destination = os.path.normpath(destination)
+        if normalized_path != normalized_destination and not normalized_path.startswith(normalized_destination + os.sep):
+            continue
+
+        if len(normalized_destination) > best_length:
+            best_source = source
+            best_destination = normalized_destination
+            best_length = len(normalized_destination)
+
+    if best_source is None or best_destination is None:
+        raise RuntimeError(f"cannot resolve host path for {container_path}")
+
+    relative_path = os.path.relpath(normalized_path, best_destination)
+    if relative_path == ".":
+        return best_source
+    return os.path.normpath(os.path.join(best_source, relative_path))
 
 
 def _start_live_server(client, tokens: list[str]):
@@ -101,6 +162,9 @@ def _start_live_server(client, tokens: list[str]):
         len(tokens),
     )
     config_dir = _prepare_live_server_config_dir()
+    data_dir = _prepare_live_server_data_dir()
+    host_config_path = _resolve_host_path(client, os.path.join(config_dir, "config.json"))
+    host_data_dir = _resolve_host_path(client, data_dir)
     server = client.containers.run(
         image=settings.live_server_image,
         name=settings.live_server_container,
@@ -110,8 +174,8 @@ def _start_live_server(client, tokens: list[str]):
             "thuai9.managed": "live-server",
         },
         volumes={
-            settings.live_server_data_dir: {"bind": "/app/data", "mode": "rw"},
-            config_dir: {"bind": "/app/config", "mode": "ro"},
+            host_data_dir: {"bind": "/app/data", "mode": "rw"},
+            host_config_path: {"bind": "/app/config/config.json", "mode": "ro"},
         },
         network=settings.live_server_network,
         detach=True,
@@ -227,11 +291,6 @@ def run_match(
     data_dir = settings.live_server_data_dir
     result_path = os.path.join(data_dir, "result.json")
     os.makedirs(data_dir, exist_ok=True)
-
-    try:
-        os.remove(result_path)
-    except FileNotFoundError:
-        pass
 
     containers = []
     server = None

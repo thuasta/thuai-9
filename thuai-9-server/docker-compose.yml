@@ -25,10 +25,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://thuai9:${POSTGRES_PASSWORD}@postgres/thuai9
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      UPLOAD_DIR: ${PWD}/submission-data/uploads
-      ARTIFACT_DIR: ${PWD}/submission-data/artifacts
+      UPLOAD_DIR: /workspace/submission-data/uploads
+      ARTIFACT_DIR: /workspace/submission-data/artifacts
     volumes:
-      - ${PWD}/submission-data:${PWD}/submission-data
+      - ./submission-data:/workspace/submission-data
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,22 +41,24 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://thuai9:${POSTGRES_PASSWORD}@postgres/thuai9
-      ARTIFACT_DIR: ${PWD}/submission-data/artifacts
-      UPLOAD_DIR: ${PWD}/submission-data/uploads
-      MATCH_DATA_DIR: ${PWD}/matches
-      GAME_CONFIG_DIR: ${PWD}/config
+      ARTIFACT_DIR: /workspace/submission-data/artifacts
+      UPLOAD_DIR: /workspace/submission-data/uploads
+      MATCH_DATA_DIR: /workspace/matches
+      GAME_CONFIG_DIR: /workspace/config
+      EVALUATOR_CONTAINER_NAME: thuai9-evaluator
+      LIVE_SERVER_CONFIG_DIR: /workspace/data
       LIVE_SERVER_IMAGE: ghcr.io/thuasta/thuai-9-server:latest
       LIVE_SERVER_CONTAINER: thuai9-live-server
       LIVE_SERVER_URL: ws://thuai9-live-server:14514
       LIVE_SERVER_NETWORK: thuai-9-server_internal
-      LIVE_SERVER_DATA_DIR: ${PWD}/data
+      LIVE_SERVER_DATA_DIR: /workspace/data
       RESTART_LIVE_SERVER: "true"
     volumes:
-      - ${PWD}/submission-data:${PWD}/submission-data
+      - ./submission-data:/workspace/submission-data
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${PWD}/matches:${PWD}/matches
-      - ${PWD}/config:${PWD}/config:ro
-      - ${PWD}/data:${PWD}/data
+      - ./matches:/workspace/matches
+      - ./config:/workspace/config:ro
+      - ./data:/workspace/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,6 +83,11 @@ services:
     image: nginx:1.27-alpine
     container_name: thuai9-nginx
     restart: unless-stopped
+    depends_on:
+      submission-api:
+        condition: service_started
+      web-spectator:
+        condition: service_started
     ports:
       - "14514:80"
     volumes:
