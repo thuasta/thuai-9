@@ -9,3 +9,6 @@ server/data
 **/node_modules/
 thuai-9-server/matches/
 thuai-9-server/submission-data/
+
+submission-data
+matches

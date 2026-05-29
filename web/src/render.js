@@ -170,8 +170,18 @@ function renderConnection(state) {
     disconnected: "已断开",
     error: "连接错误",
     replay: "回放中",
+    waiting: "等待下一场",
+    starting: "比赛启动中",
   };
-  badge.textContent = labels[state.connection.status] || state.connection.status;
+  const statusLabel = state.connection.statusLabel || labels[state.connection.status] || state.connection.status;
+  const statusDetail = state.connection.statusDetail || "";
+  const badgeTitle = state.connection.role === "observer" && !state.replay.enabled ? "观战状态" : "连接状态";
+  badge.innerHTML = `
+    <span>${escapeHtml(badgeTitle)}</span>
+    <strong>${escapeHtml(statusLabel)}</strong>
+    ${statusDetail ? `<small class="status-detail">${escapeHtml(statusDetail)}</small>` : ""}
+  `;
+  badge.title = statusDetail || statusLabel;
   badge.dataset.status = state.connection.status;
 }
 

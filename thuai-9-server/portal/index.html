@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>THUAI 9 比赛平台</title>
-    <link rel="stylesheet" href="/app.css">
+    <link rel="stylesheet" href="/app.css?v=20260529-agent-scoreboard">
   </head>
   <body>
     <header class="site-header">
@@ -68,11 +68,8 @@
 
         <form id="uploadForm" class="stack">
           <label class="field">
-            <span>语言</span>
-            <select name="language">
-              <option value="python">Python</option>
-              <option value="cpp">C++</option>
-            </select>
+            <span>代码名称</span>
+            <input name="name" type="text" maxlength="64" placeholder="例如：baseline / v2 / 冒险版">
           </label>
           <label class="field">
             <span>代码压缩包</span>
@@ -103,6 +100,7 @@
             <thead>
               <tr>
                 <th>#</th>
+                <th>Agent</th>
                 <th>队伍</th>
                 <th>总分</th>
                 <th>场均</th>
@@ -111,13 +109,13 @@
               </tr>
             </thead>
             <tbody id="leaderboardBody">
-              <tr><td colspan="6">加载中...</td></tr>
+              <tr><td colspan="7">加载中...</td></tr>
             </tbody>
           </table>
         </div>
       </section>
     </main>
 
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/app.js?v=20260529-agent-scoreboard"></script>
   </body>
 </html>

@@ -11,58 +11,82 @@ router = APIRouter()
 
 @router.get("/", response_model=list[LeaderboardEntry])
 async def leaderboard(db: AsyncSession = Depends(get_db)):
-    teams_result = await db.execute(select(Team))
-    teams = {t.id: t.name for t in teams_result.scalars().all()}
-
-    subs_result = await db.execute(select(Submission.id, Submission.team_id))
-    sub_to_team = {row[0]: row[1] for row in subs_result.all()}
-
-    matches_result = await db.execute(
-        select(Match).where(Match.status == "finished")
+    submissions_result = await db.execute(
+        select(Submission.id, Submission.name, Team.name)
+        .join(Team, Team.id == Submission.team_id)
     )
-    matches = matches_result.scalars().all()
-
-    stats: dict[int, dict] = {
-        tid: {"scores": []}
-        for tid in teams
+    submissions = {
+        row[0]: {
+            "submission_name": row[1],
+            "team_name": row[2],
+        }
+        for row in submissions_result.all()
     }
 
-    for m in matches:
-        participant_result = await db.execute(
-            select(MatchParticipant).where(MatchParticipant.match_id == m.id)
+    stats: dict[int, list[int]] = {}
+    participant_rows = await db.execute(
+        select(
+            MatchParticipant.match_id,
+            MatchParticipant.submission_id,
+            MatchParticipant.score,
         )
-        participants = [
-            p for p in participant_result.scalars().all()
-            if p.score is not None and p.team_id in stats
-        ]
-        if participants:
-            for p in participants:
-                stats[p.team_id]["scores"].append(p.score)
+        .join(Match, Match.id == MatchParticipant.match_id)
+        .where(
+            Match.status == "finished",
+            MatchParticipant.score.is_not(None),
+        )
+    )
+    matches_with_participants: set[int] = set()
+    for match_id, submission_id, score in participant_rows.all():
+        if submission_id not in submissions or score is None:
+            continue
+        matches_with_participants.add(match_id)
+        stats.setdefault(submission_id, []).append(score)
+
+    legacy_matches_result = await db.execute(
+        select(
+            Match.id,
+            Match.submission_a_id,
+            Match.submission_b_id,
+            Match.score_a,
+            Match.score_b,
+        )
+        .where(Match.status == "finished")
+    )
+    for match_id, submission_a_id, submission_b_id, score_a, score_b in legacy_matches_result.all():
+        if match_id in matches_with_participants:
             continue
 
         # Legacy two-player rows from before match_participants existed.
-        team_a = sub_to_team.get(m.submission_a_id)
-        team_b = sub_to_team.get(m.submission_b_id)
-        if team_a is None or team_b is None:
-            continue
-        if m.score_a is None or m.score_b is None:
-            continue
-        stats[team_a]["scores"].append(m.score_a)
-        stats[team_b]["scores"].append(m.score_b)
+        if submission_a_id in submissions and score_a is not None:
+            stats.setdefault(submission_a_id, []).append(score_a)
+        if submission_b_id in submissions and score_b is not None:
+            stats.setdefault(submission_b_id, []).append(score_b)
 
     entries = []
-    for tid, s in stats.items():
-        scores = s["scores"]
+    for submission_id, scores in stats.items():
+        if not scores:
+            continue
         total_score = sum(scores)
         total_matches = len(scores)
+        submission = submissions[submission_id]
         entries.append(
             LeaderboardEntry(
-                team_name=teams[tid],
+                submission_id=submission_id,
+                submission_name=submission["submission_name"],
+                team_name=submission["team_name"],
                 total_score=total_score,
                 average_score=round(total_score / total_matches, 3) if total_matches else 0,
                 best_score=max(scores) if scores else None,
                 total_matches=total_matches,
             )
         )
-    entries.sort(key=lambda e: (-e.average_score, -e.total_score, e.team_name))
+    entries.sort(
+        key=lambda e: (
+            -e.average_score,
+            -e.total_score,
+            e.submission_name,
+            e.submission_id,
+        )
+    )
     return entries

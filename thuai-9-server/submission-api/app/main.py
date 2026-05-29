@@ -2,15 +2,80 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, select, text, update
 
-from app.database import Base, engine
+from app.database import AsyncSessionLocal, Base, engine
+from app.models import Submission
 from app.routers import leaderboard, matches, submissions, teams
+
+
+async def ensure_schema() -> None:
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+        def add_submission_columns(sync_conn) -> None:
+            def ensure_column(column_name: str, ddl: str) -> None:
+                inspector = inspect(sync_conn)
+                columns = {column["name"] for column in inspector.get_columns("submissions")}
+                if column_name in columns:
+                    return
+                try:
+                    sync_conn.execute(text(ddl))
+                except Exception:
+                    inspector = inspect(sync_conn)
+                    columns = {column["name"] for column in inspector.get_columns("submissions")}
+                    if column_name not in columns:
+                        raise
+
+            ensure_column("name", "ALTER TABLE submissions ADD COLUMN name VARCHAR(64)")
+            ensure_column(
+                "is_dispatched",
+                "ALTER TABLE submissions ADD COLUMN is_dispatched BOOLEAN DEFAULT FALSE",
+            )
+
+        await conn.run_sync(add_submission_columns)
+
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            text("UPDATE submissions SET name = '代码 #' || id WHERE name IS NULL OR TRIM(name) = ''")
+        )
+        await session.execute(
+            text("UPDATE submissions SET is_dispatched = FALSE WHERE is_dispatched IS NULL")
+        )
+        await session.execute(
+            text("UPDATE submissions SET is_dispatched = FALSE WHERE status IS NULL OR status != 'ready'")
+        )
+
+        ready_rows = await session.execute(
+            select(Submission.id, Submission.team_id)
+            .where(Submission.status == "ready", Submission.is_dispatched.is_(True))
+            .order_by(
+                Submission.team_id,
+                Submission.compiled_at.desc().nullslast(),
+                Submission.uploaded_at.desc(),
+                Submission.id.desc(),
+            )
+        )
+        duplicate_ids: list[int] = []
+        seen_teams: set[int] = set()
+        for submission_id, team_id in ready_rows.all():
+            if team_id in seen_teams:
+                duplicate_ids.append(submission_id)
+                continue
+            seen_teams.add(team_id)
+
+        if duplicate_ids:
+            await session.execute(
+                update(Submission)
+                .where(Submission.id.in_(duplicate_ids))
+                .values(is_dispatched=False)
+            )
+        await session.commit()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await ensure_schema()
     yield
 
 

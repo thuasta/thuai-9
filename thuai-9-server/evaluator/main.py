@@ -4,13 +4,13 @@ import os
 import random
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, inspect, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from compiler import compile_cpp, compile_python
+from compiler import compile_submission
 from config import settings
-from runner import MatchAgent, run_match
+from runner import MatchAgent, cleanup_runtime_containers, run_match
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # Import models after engine is set up
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -31,8 +31,10 @@ class Submission(Base):
     __tablename__ = "submissions"
     id = Column(Integer, primary_key=True)
     team_id = Column(Integer, nullable=False)
-    language = Column(String(8), nullable=False)
+    name = Column(String(64), nullable=False, default="未命名代码")
+    language = Column(String(8), nullable=False, default="docker", server_default="docker")
     status = Column(String(16), nullable=False)
+    is_dispatched = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     error_log = Column(Text)
     artifact_path = Column(Text)
     uploaded_at = Column(DateTime(timezone=True))
@@ -78,8 +80,77 @@ os.makedirs(settings.upload_dir, exist_ok=True)
 os.makedirs(settings.match_data_dir, exist_ok=True)
 
 
+async def backfill_submission_selection(db: AsyncSession) -> None:
+    await db.execute(
+        text("UPDATE submissions SET name = '代码 #' || id WHERE name IS NULL OR TRIM(name) = ''")
+    )
+    await db.execute(
+        text("UPDATE submissions SET is_dispatched = FALSE WHERE is_dispatched IS NULL")
+    )
+    await db.execute(
+        text("UPDATE submissions SET is_dispatched = FALSE WHERE status IS NULL OR status != 'ready'")
+    )
+
+    ready_rows = await db.execute(
+        select(Submission.id, Submission.team_id)
+        .where(Submission.status == "ready", Submission.is_dispatched.is_(True))
+        .order_by(
+            Submission.team_id,
+            Submission.compiled_at.desc().nullslast(),
+            Submission.uploaded_at.desc(),
+            Submission.id.desc(),
+        )
+    )
+    duplicate_ids: list[int] = []
+    seen_teams: set[int] = set()
+    for submission_id, team_id in ready_rows.all():
+        if team_id in seen_teams:
+            duplicate_ids.append(submission_id)
+            continue
+        seen_teams.add(team_id)
+
+    if duplicate_ids:
+        await db.execute(
+            update(Submission)
+            .where(Submission.id.in_(duplicate_ids))
+            .values(is_dispatched=False)
+        )
+    await db.commit()
+
+
+async def recover_inflight_matches(db: AsyncSession) -> None:
+    running_rows = await db.execute(
+        select(Match.id).where(Match.status == "running")
+    )
+    running_ids = [match_id for match_id, in running_rows.all()]
+    if not running_ids:
+        return
+
+    logger.warning("Recovering stale running matches on startup: %s", running_ids)
+    await db.execute(
+        delete(SubmissionMatchLog).where(SubmissionMatchLog.match_id.in_(running_ids))
+    )
+    await db.execute(
+        update(MatchParticipant)
+        .where(MatchParticipant.match_id.in_(running_ids))
+        .values(score=None)
+    )
+    await db.execute(
+        update(Match)
+        .where(Match.id.in_(running_ids))
+        .values(
+            status="pending",
+            score_a=None,
+            score_b=None,
+            error_log=None,
+            finished_at=None,
+        )
+    )
+    await db.commit()
+
+
 async def compile_loop():
-    """Pick up pending submissions and compile them."""
+    """Pick up pending submissions and build Docker images."""
     while True:
         try:
             async with AsyncSessionLocal() as db:
@@ -89,31 +160,60 @@ async def compile_loop():
                 sub = result.scalar_one_or_none()
 
                 if sub is not None:
-                    logger.info("Compiling submission %d (%s)", sub.id, sub.language)
+                    logger.info("Building submission image %d", sub.id)
                     await db.execute(
                         update(Submission)
                         .where(Submission.id == sub.id)
-                        .values(status="compiling")
+                        .values(
+                            status="compiling",
+                            error_log="编译中...",
+                        )
                     )
                     await db.commit()
 
-                    if sub.language == "cpp":
-                        success, error_log = await asyncio.get_running_loop().run_in_executor(
-                            None, compile_cpp, sub.id
-                        )
-                    else:
-                        success, error_log = await asyncio.get_running_loop().run_in_executor(
-                            None, compile_python, sub.id
-                        )
+                    loop = asyncio.get_running_loop()
 
-                    artifact_path = os.path.join(settings.artifact_dir, str(sub.id)) if success else None
+                    async def persist_compile_log(submission_id: int, compile_log: str) -> None:
+                        async with AsyncSessionLocal() as progress_db:
+                            await progress_db.execute(
+                                update(Submission)
+                                .where(Submission.id == submission_id)
+                                .where(Submission.status == "compiling")
+                                .values(error_log=compile_log)
+                            )
+                            await progress_db.commit()
+
+                    def on_progress(compile_log: str) -> None:
+                        future = asyncio.run_coroutine_threadsafe(
+                            persist_compile_log(sub.id, compile_log),
+                            loop,
+                        )
+                        def _swallow_future_exception(done_future) -> None:
+                            try:
+                                exc = done_future.exception()
+                            except Exception:
+                                logger.exception("persist_compile_log callback failed for submission %d", sub.id)
+                                return
+                            if exc is not None:
+                                logger.exception(
+                                    "persist_compile_log callback failed for submission %d",
+                                    sub.id,
+                                    exc_info=exc,
+                                )
+                        future.add_done_callback(_swallow_future_exception)
+
+                    success, compile_log, image_ref = await loop.run_in_executor(
+                        None, compile_submission, sub.id, on_progress
+                    )
+
                     await db.execute(
                         update(Submission)
                         .where(Submission.id == sub.id)
                         .values(
                             status="ready" if success else "failed",
-                            error_log=error_log or None,
-                            artifact_path=artifact_path,
+                            error_log=compile_log or None,
+                            artifact_path=image_ref if success else None,
+                            language="docker",
                             compiled_at=datetime.now(timezone.utc),
                         )
                     )
@@ -139,15 +239,24 @@ async def arena_loop():
                     await asyncio.sleep(30)
                     continue
 
-                # Get latest ready submission per team
+                # Use the submission explicitly dispatched by each team.
                 result = await db.execute(
                     select(Submission)
-                    .where(Submission.status == "ready")
-                    .order_by(Submission.team_id, Submission.compiled_at.desc())
+                    .where(
+                        Submission.status == "ready",
+                        Submission.is_dispatched.is_(True),
+                    )
+                    .order_by(
+                        Submission.team_id,
+                        Submission.compiled_at.desc().nullslast(),
+                        Submission.uploaded_at.desc(),
+                        Submission.id.desc(),
+                    )
                 )
                 all_ready = result.scalars().all()
 
-                # Deduplicate: keep latest per team
+                # Defensive dedupe in case legacy data or a race leaves multiple
+                # dispatched submissions for the same team.
                 seen_teams: set[int] = set()
                 ready: list[Submission] = []
                 for sub in all_ready:
@@ -155,9 +264,10 @@ async def arena_loop():
                         seen_teams.add(sub.team_id)
                         ready.append(sub)
 
-                if len(ready) >= 2:
+                if len(ready) >= 1:
                     random.shuffle(ready)
-                    a, b = ready[0], ready[1]
+                    a = ready[0]
+                    b = ready[1] if len(ready) >= 2 else ready[0]
                     match = Match(
                         mode="arena",
                         submission_a_id=a.id,
@@ -222,7 +332,7 @@ async def match_runner_loop():
                             MatchAgent(
                                 submission_id=row.submission_id,
                                 team_id=row.team_id,
-                                language=submissions[row.submission_id].language,
+                                image_ref=submissions[row.submission_id].artifact_path or "",
                                 token=row.player_token,
                             )
                             for row in participant_rows
@@ -240,13 +350,13 @@ async def match_runner_loop():
                             MatchAgent(
                                 submission_id=submissions[match.submission_a_id].id,
                                 team_id=submissions[match.submission_a_id].team_id,
-                                language=submissions[match.submission_a_id].language,
+                                image_ref=submissions[match.submission_a_id].artifact_path or "",
                                 token=f"m{match.id}s{match.submission_a_id}",
                             ),
                             MatchAgent(
                                 submission_id=submissions[match.submission_b_id].id,
                                 team_id=submissions[match.submission_b_id].team_id,
-                                language=submissions[match.submission_b_id].language,
+                                image_ref=submissions[match.submission_b_id].artifact_path or "",
                                 token=f"m{match.id}s{match.submission_b_id}",
                             ),
                         ]
@@ -303,10 +413,38 @@ async def ensure_schema():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+        def add_submission_columns(sync_conn) -> None:
+            def ensure_column(column_name: str, ddl: str) -> None:
+                inspector = inspect(sync_conn)
+                columns = {column["name"] for column in inspector.get_columns("submissions")}
+                if column_name in columns:
+                    return
+                try:
+                    sync_conn.execute(text(ddl))
+                except Exception:
+                    inspector = inspect(sync_conn)
+                    columns = {column["name"] for column in inspector.get_columns("submissions")}
+                    if column_name not in columns:
+                        raise
+
+            ensure_column("name", "ALTER TABLE submissions ADD COLUMN name VARCHAR(64)")
+            ensure_column(
+                "is_dispatched",
+                "ALTER TABLE submissions ADD COLUMN is_dispatched BOOLEAN DEFAULT FALSE",
+            )
+
+        await conn.run_sync(add_submission_columns)
+
+    async with AsyncSessionLocal() as db:
+        await backfill_submission_selection(db)
+
 
 async def main():
     logger.info("Evaluator starting")
     await ensure_schema()
+    cleanup_runtime_containers()
+    async with AsyncSessionLocal() as db:
+        await recover_inflight_matches(db)
     await asyncio.gather(
         compile_loop(),
         arena_loop(),

@@ -151,15 +151,44 @@ button:disabled {
 
 .status-metric {
   display: grid;
+  min-height: 72px;
   align-items: center;
+  align-content: start;
+  gap: 2px;
   border-color: rgba(15, 139, 141, 0.35);
   color: var(--teal);
   font-weight: 800;
 }
 
+.status-metric strong {
+  overflow: visible;
+  font-size: 16px;
+  text-overflow: initial;
+  white-space: normal;
+}
+
+.status-detail {
+  display: block;
+  color: inherit;
+  opacity: 0.78;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .status-metric[data-status="connected"] {
   border-color: rgba(47, 125, 79, 0.45);
   color: var(--green);
+}
+
+.status-metric[data-status="waiting"] {
+  border-color: rgba(200, 168, 75, 0.42);
+  color: var(--gold);
+}
+
+.status-metric[data-status="starting"] {
+  border-color: rgba(88, 166, 255, 0.4);
+  color: var(--teal);
 }
 
 .status-metric[data-status="replay"] {
