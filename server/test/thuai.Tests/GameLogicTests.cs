@@ -281,6 +281,22 @@ public class MatchEngineTests
     }
 
     [Fact]
+    public void SubmitOrder_NotionalOverflow_ReturnsNullAndDoesNotMintMora()
+    {
+        long initialMora = _buyer.Mora;
+
+        // price * quantity overflows Int64. Without a guard the wrapped-negative
+        // notional slips past the affordability check and freezes a negative
+        // amount, inflating Mora. The order must instead be rejected outright.
+        var order = _engine.SubmitOrder("buyer", OrderSide.Buy,
+            price: 9_000_000_000_000_000_000L, quantity: 2, currentTick: 0);
+
+        Assert.Null(order);
+        Assert.Equal(initialMora, _buyer.Mora);
+        Assert.Equal(0, _buyer.FrozenMora);
+    }
+
+    [Fact]
     public void SubmitOrder_NoLongerRejectsAtSubmitTime()
     {
         // The new rules enforce action limits on the effective trading day, not at submit time.

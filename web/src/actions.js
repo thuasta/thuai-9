@@ -45,8 +45,8 @@ export function debugSetPlayerMessage(targetPlayerId, { mora, gold } = {}) {
   if (id !== undefined) {
     message.targetPlayerId = id;
   }
-  if (mora !== undefined && mora !== null && mora !== "") message.mora = Number(mora);
-  if (gold !== undefined && gold !== null && gold !== "") message.gold = Number(gold);
+  if (mora !== undefined && mora !== null && mora !== "") message.mora = toSafeInteger(mora);
+  if (gold !== undefined && gold !== null && gold !== "") message.gold = toSafeInteger(gold);
   return message;
 }
 
@@ -116,6 +116,16 @@ export function sendJson(ws, message) {
 function toInteger(value) {
   const number = Number.parseInt(value, 10);
   return Number.isFinite(number) ? number : 0;
+}
+
+// The C# server deserializes mora/gold as long/int and silently drops a message
+// whose number is fractional or beyond what the integer reader accepts. Truncate
+// to a whole number and clamp into the JS safe-integer range (well within long).
+function toSafeInteger(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  const truncated = Math.trunc(number);
+  return Math.max(Number.MIN_SAFE_INTEGER, Math.min(Number.MAX_SAFE_INTEGER, truncated));
 }
 
 function toPlayerId(value) {

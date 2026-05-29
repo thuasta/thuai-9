@@ -118,7 +118,12 @@ public partial class Game
         CumulativeNavs[token] = 0;
 
         if (Stage == GameStage.StrategySelection)
+        {
             _playerStrategySelected[token] = false;
+            // Options are broadcast once per phase; re-arm so this mid-phase
+            // joiner still receives the current draft.
+            HasPendingStrategyOptions = true;
+        }
 
         Log.Information("Player {Token} joined game with PlayerId {PlayerId}", token, player.PlayerId);
         return true;
@@ -157,6 +162,7 @@ public partial class Game
         Scoreboard.Remove(token);
         CumulativeNavs.Remove(token);
         _playerStrategySelected.Remove(token);
+        _monthsSettled.Remove(token);
         Log.Information("Player {Token} removed from game", token);
     }
 }

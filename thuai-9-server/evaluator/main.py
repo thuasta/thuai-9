@@ -20,7 +20,7 @@ engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # Import models after engine is set up
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase
 
 # Keep at most this many match-log rows per submission so a long-lived arena

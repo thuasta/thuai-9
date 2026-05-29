@@ -97,17 +97,12 @@ public record GameSettings
     [JsonPropertyName("defaultFeeRate")]
     public double DefaultFeeRate { get; init; } = 0.0002;
 
-    [JsonPropertyName("maxOrdersPerTick")]
-    public int MaxOrdersPerTick { get; init; } = 2;
-
+    // Per-day action quotas that the engine actually enforces (Player.CanPlace*).
     [JsonPropertyName("maxImmediateOrdersPerDay")]
     public int MaxImmediateOrdersPerDay { get; init; } = 1;
 
     [JsonPropertyName("maxRestingOrdersPerDay")]
     public int MaxRestingOrdersPerDay { get; init; } = 1;
-
-    [JsonPropertyName("maxReportsPerNews")]
-    public int MaxReportsPerNews { get; init; } = 1;
 
     [JsonPropertyName("newsIntervalMin")]
     public int NewsIntervalMin { get; init; } = 200;

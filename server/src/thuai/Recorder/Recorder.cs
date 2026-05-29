@@ -89,7 +89,12 @@ public class Recorder : IDisposable
         {
             var result = new GameResult { Scores = scores };
             string json = JsonSerializer.Serialize(result, JsonOptions);
-            File.WriteAllText(_targetResultFilePath, json);
+            // Write atomically: an external reader (the evaluator) polls this file,
+            // and a non-atomic File.WriteAllText can be observed mid-write as
+            // truncated/invalid JSON. Write to a temp file, then move into place.
+            string tempPath = _targetResultFilePath + ".tmp";
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, _targetResultFilePath, overwrite: true);
             Log.Information("Results saved to {Path}", _targetResultFilePath);
         }
         catch (Exception ex)

@@ -44,6 +44,11 @@ async def list_my_matches(
 
 @router.post("/admin/trigger", response_model=MatchOut, dependencies=[Depends(require_admin)])
 async def trigger_match(body: TriggerMatchRequest, db: AsyncSession = Depends(get_db)):
+    # A match needs two distinct sides; equal ids would build one participant and
+    # the live game could never settle as a 2-player match.
+    if body.submission_a_id == body.submission_b_id:
+        raise HTTPException(status_code=400, detail="两个提交必须不同")
+
     for sub_id in (body.submission_a_id, body.submission_b_id):
         result = await db.execute(
             select(Submission).where(Submission.id == sub_id, Submission.status == "ready")

@@ -166,7 +166,7 @@ export function buildSampleMessages(role = "observer") {
   messages.push({
     messageType: "DAY_SETTLEMENT",
     day: 1,
-    winnerToken: "player1",
+    winnerPlayerId: 0,
     reason: "NAV",
     scores: [
       { token: "player1", score: 1 },

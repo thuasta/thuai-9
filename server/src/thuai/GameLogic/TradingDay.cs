@@ -216,17 +216,55 @@ public class TradingDay
 
     public Dictionary<string, long> CalculateSettlement()
     {
-        long midPrice = _orderBook.MidPrice;
-        return _players.Values.ToDictionary(player => player.Token, player => player.CalculateNAV(midPrice));
+        lock (_lock)
+        {
+            long midPrice = _orderBook.MidPrice;
+            return _players.Values.ToDictionary(player => player.Token, player => player.CalculateNAV(midPrice));
+        }
     }
 
+    // Order-book / pending-order state is mutated by socket-thread order handlers
+    // (which all take _lock) while the per-tick broadcaster and recorder read it
+    // from the game-loop thread. These read paths therefore take _lock too —
+    // _lock is reentrant, so internal callers that already hold it (e.g.
+    // CancelPlayerOrders, ActivateStopLossBlade) are unaffected.
     public List<Order> GetPlayerPendingOrders(string playerToken)
     {
-        return _matchEngine.GetPendingOrders(playerToken)
-            .Concat(_orderBook.GetPlayerOrders(playerToken))
-            .OrderBy(order => order.ArrivalTick)
-            .ThenBy(order => order.OrderId)
-            .ToList();
+        lock (_lock)
+        {
+            return _matchEngine.GetPendingOrders(playerToken)
+                .Concat(_orderBook.GetPlayerOrders(playerToken))
+                .OrderBy(order => order.ArrivalTick)
+                .ThenBy(order => order.OrderId)
+                .ToList();
+        }
+    }
+
+    public sealed record MarketSnapshot(
+        List<(long Price, int Quantity)> Bids,
+        List<(long Price, int Quantity)> Asks,
+        long LastPrice,
+        long MidPrice,
+        int Volume);
+
+    /// <summary>Consistent market-data snapshot taken under the trading-day lock.</summary>
+    public MarketSnapshot SnapshotMarket(int maxLevels = 10)
+    {
+        lock (_lock)
+        {
+            return new MarketSnapshot(
+                _orderBook.GetVisibleBids(maxLevels),
+                _orderBook.GetVisibleAsks(maxLevels),
+                _orderBook.LastPrice,
+                _orderBook.MidPrice,
+                _orderBook.TotalVolume);
+        }
+    }
+
+    /// <summary>Mid price read under the lock, for NAV display during a live day.</summary>
+    public long CurrentMidPrice
+    {
+        get { lock (_lock) { return _orderBook.MidPrice; } }
     }
 
     public void CancelPlayerOrders(string playerToken)

@@ -35,12 +35,24 @@ public partial class GameController
             {
                 Task clock = _clockProvider.CreateClock();
 
-                Game.Tick();
-
-                if (Game.Stage == GameStage.Finished)
+                try
                 {
+                    Game.Tick();
+
+                    if (Game.Stage == GameStage.Finished)
+                    {
+                        IsRunning = false;
+                        Log.Information("Game finished");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // A throw here (tick logic, or any broadcast/recorder handler on
+                    // AfterGameTickEvent) must not silently abandon the loop and hang
+                    // the server forever. Stop cleanly so Main runs its shutdown path
+                    // (flush replay + write the final result.json).
+                    Log.Fatal(ex, "Unhandled exception in game tick loop; stopping game");
                     IsRunning = false;
-                    Log.Information("Game finished");
                 }
 
                 await clock;

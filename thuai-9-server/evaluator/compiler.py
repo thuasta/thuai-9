@@ -12,6 +12,10 @@ from config import settings
 logger = logging.getLogger(__name__)
 _docker_client = None
 MAX_COMPILE_LOG_BYTES = 128 * 1024
+# Wall-clock cap on an untrusted Dockerfile build. compile_loop is serial, so a
+# single slow/infinite build (RUN sleep, huge download) would otherwise wedge
+# every other team's submission behind it forever.
+BUILD_TIMEOUT_SECONDS = 300
 
 
 def get_docker():
@@ -19,6 +23,15 @@ def get_docker():
     if _docker_client is None:
         _docker_client = docker.from_env()
     return _docker_client
+
+
+def _prune_image(client, image_ref: str) -> None:
+    # Best-effort: a timed-out build may have left a partial/tagged image; drop
+    # it so a dead submission doesn't leak disk. Never raise from cleanup.
+    try:
+        client.images.remove(image=image_ref, force=True)
+    except Exception:
+        pass
 
 
 def _extract_zip_direct(zip_path: str, dest_dir: str) -> list[str]:
@@ -135,12 +148,26 @@ def compile_submission(
 
     log_entries: list[dict] = []
     last_emit = 0.0
+    build_deadline = time.monotonic() + BUILD_TIMEOUT_SECONDS
 
     if on_progress is not None:
         on_progress("编译中...")
 
     try:
         for entry in build_logs:
+            if time.monotonic() > build_deadline:
+                # Stop consuming so we don't block the queue; closing the
+                # generator signals docker-py to abort the in-flight build.
+                # The check runs between yielded log lines, so a single step
+                # that blocks while emitting no output is bounded only on its
+                # next emission — acceptable here since builds normally stream.
+                build_logs.close()
+                _prune_image(client, image_ref)
+                shutil.rmtree(build_dir, ignore_errors=True)
+                return False, _normalize_compile_log(
+                    f"编译超时（超过 {BUILD_TIMEOUT_SECONDS} 秒）", False
+                ), None
+
             chunk = _build_log_chunk(entry)
             if chunk:
                 log_entries.append(entry)

@@ -270,6 +270,15 @@ function isPublicSpectatorPage() {
 
 const PLAYER_MAP_POLL_MS = 15000;
 let playerMapTimer = null;
+// Tracks which match the accumulated live runtime state belongs to, so a new
+// match (the evaluator restarts the game server per match) clears the previous
+// match's candles/events/summaries before the new stream is applied.
+let observedMatchId = null;
+// Last live GAME_STATE position seen on a managed-observer socket. A new match's
+// stream restarts at month 1 / a small tick, so a backward step is the earliest
+// new-match signal — it fires before the slower player-map poll reports a new id.
+let lastLiveMatchMonth = null;
+let lastLiveMatchTick = null;
 
 function isManagedObserverSession() {
   return isPublicSpectatorPage() && state.connection.role === "observer" && !state.replay.enabled;
@@ -294,6 +303,12 @@ function syncManagedObserverConnection(options = {}) {
 function applyManagedObserverMatch(payload) {
   if (!isManagedObserverSession()) return;
   const match = normalizeObserverMatch(payload);
+  if (match.matchId !== null && observedMatchId !== null && match.matchId !== observedMatchId) {
+    resetLiveRuntimeState();
+  }
+  if (match.matchId !== null) {
+    observedMatchId = match.matchId;
+  }
   setConnectionPatch(state, {
     currentMatchId: match.matchId,
     currentMatchStatus: match.matchStatus,
@@ -301,6 +316,33 @@ function applyManagedObserverMatch(payload) {
   syncManagedObserverConnection({
     socketConnected: state.connection.status === "connected",
   });
+}
+
+function resetLiveRuntimeState() {
+  resetRuntimeState(state);
+  resetMarketChartViewport();
+  // Clear the match anchor too: the GAME_STATE-driven reset can run before the
+  // player-map poll learns the new id, so the next poll should adopt that id
+  // without triggering a second wipe of the freshly-started match's data.
+  observedMatchId = null;
+  lastLiveMatchMonth = null;
+  lastLiveMatchTick = null;
+}
+
+function maybeResetForNewLiveMatch(message) {
+  if (!isManagedObserverSession()) return;
+  if (!message || message.messageType !== "GAME_STATE") return;
+  const month = Number(message.currentMonth);
+  const tick = Number(message.currentTick);
+  if (!Number.isFinite(month) || !Number.isFinite(tick)) return;
+  const wentBackward =
+    lastLiveMatchMonth !== null &&
+    (month < lastLiveMatchMonth || (month === lastLiveMatchMonth && tick < lastLiveMatchTick));
+  if (wentBackward) {
+    resetLiveRuntimeState();
+  }
+  lastLiveMatchMonth = month;
+  lastLiveMatchTick = tick;
 }
 
 async function fetchPlayerMap() {
@@ -393,7 +435,9 @@ function connect() {
 
   ws.addEventListener("message", (event) => {
     try {
-      applyMessage(state, JSON.parse(event.data));
+      const message = JSON.parse(event.data);
+      maybeResetForNewLiveMatch(message);
+      applyMessage(state, message);
     } catch (error) {
       pushEvent(state, {
         kind: "error",

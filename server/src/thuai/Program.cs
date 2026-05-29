@@ -107,11 +107,14 @@ public class Program
                     recorder.SaveResults(e.Game.GetScoreboardSnapshot());
                 }
 
+                // Persist periodic player statistics, but do NOT rewrite
+                // result.json here: mid-game scoreboards are all-zero until
+                // settlement, and an external reader (the evaluator) treats any
+                // result.json with all tokens present as the final result. The
+                // authoritative result.json is written at each Settlement (above)
+                // and once more at game completion below.
                 var sessions = sessionTracker.GetSnapshots(e.Game.CurrentTick);
-                if (statisticsWriter.MaybeSave(e.Game, sessions))
-                {
-                    recorder.SaveResults(e.Game.GetScoreboardSnapshot());
-                }
+                statisticsWriter.MaybeSave(e.Game, sessions);
             };
 
             // Start server
@@ -212,7 +215,7 @@ public class Program
             CurrentMonth = game.CurrentMonthNumber,
             CurrentDay = game.CurrentDayNumber,
             CurrentTick = game.CurrentTick,
-            TotalTicks = 30,
+            TotalTicks = game.TradingDayTicks,
             Scores = game.Players.Values
                 .OrderBy(player => player.PlayerId)
                 .Select(player => new PlayerScore
@@ -239,14 +242,16 @@ public class Program
         if ((game.Stage == GameStage.TradingDay || game.Stage == GameStage.Settlement) && game.CurrentTradingDay != null)
         {
             var day = game.CurrentTradingDay;
-            var orderBook = day.OrderBook;
+            // Snapshot order-book state under the trading-day lock: socket-thread
+            // order handlers mutate these collections concurrently with this read.
+            var market = day.SnapshotMarket();
 
-            var baseBids = orderBook.GetVisibleBids().Select(l => new PriceLevel
+            var baseBids = market.Bids.Select(l => new PriceLevel
             {
                 Price = l.Price,
                 Quantity = l.Quantity
             }).ToList();
-            var baseAsks = orderBook.GetVisibleAsks().Select(l => new PriceLevel
+            var baseAsks = market.Asks.Select(l => new PriceLevel
             {
                 Price = l.Price,
                 Quantity = l.Quantity
@@ -257,9 +262,9 @@ public class Program
             {
                 Bids = baseBids,
                 Asks = baseAsks,
-                LastPrice = orderBook.LastPrice,
-                MidPrice = orderBook.MidPrice,
-                Volume = orderBook.TotalVolume,
+                LastPrice = market.LastPrice,
+                MidPrice = market.MidPrice,
+                Volume = market.Volume,
                 Tick = day.CurrentTick
             };
             agentServer.PublishToAll(marketState);
@@ -275,7 +280,7 @@ public class Program
                     Gold = player.Gold,
                     FrozenGold = player.FrozenGold,
                     LockedGold = player.LockedGold,
-                    Nav = player.CalculateNAV(orderBook.MidPrice),
+                    Nav = player.CalculateNAV(market.MidPrice),
                     NetworkDelay = player.NetworkDelay,
                     ImmediateOrdersUsedToday = player.ImmediateOrdersUsedToday,
                     RestingOrdersUsedToday = player.RestingOrdersUsedToday,
@@ -298,7 +303,11 @@ public class Program
             }
         }
 
-        if (game.Stage == GameStage.StrategySelection)
+        // Strategy options are broadcast once per selection phase (on entry, or
+        // when a player joins mid-phase) rather than every tick — re-broadcasting
+        // each tick spammed clients and a card a player already owns is silently
+        // unselectable, so a naive agent would re-pick it on every broadcast.
+        if (game.Stage == GameStage.StrategySelection && game.HasPendingStrategyOptions)
         {
             var cardManager = game.CardManager;
             var options = new StrategyOptionsMessage
@@ -329,6 +338,7 @@ public class Program
                     : null
             };
             agentServer.PublishToAll(options);
+            game.MarkStrategyOptionsPublished();
         }
     }
 
@@ -573,6 +583,10 @@ public class Program
             replayEvents.Add(BuildDaySettlementMessage(game));
         }
 
+        // Snapshot order-book state under the trading-day lock; the recorder runs
+        // on the game-loop thread while socket threads mutate these collections.
+        var recMarket = game.CurrentTradingDay?.SnapshotMarket();
+
         var snapshot = new
         {
             Tick = game.CurrentTick,
@@ -581,11 +595,11 @@ public class Program
             Day = game.CurrentDayNumber,
             Scores = game.Scoreboard,
             TradingDayTick = game.CurrentTradingDay?.CurrentTick,
-            MarketState = game.CurrentTradingDay != null ? new
+            MarketState = recMarket != null ? new
             {
-                game.CurrentTradingDay.OrderBook.LastPrice,
-                MidPrice = game.CurrentTradingDay.OrderBook.MidPrice,
-                Volume = game.CurrentTradingDay.OrderBook.TotalVolume
+                recMarket.LastPrice,
+                MidPrice = recMarket.MidPrice,
+                Volume = recMarket.Volume
             } : null,
             Players = game.Players.Values.Select(p => new
             {
@@ -609,8 +623,8 @@ public class Program
                     Status = o.Status.ToString(),
                     Intent = o.Intent?.ToString() ?? ""
                 }).ToList(),
-                Nav = game.CurrentTradingDay != null
-                    ? p.CalculateNAV(game.CurrentTradingDay.OrderBook.MidPrice)
+                Nav = recMarket != null
+                    ? p.CalculateNAV(recMarket.MidPrice)
                     : p.Mora
             }).ToList(),
             Events = replayEvents
