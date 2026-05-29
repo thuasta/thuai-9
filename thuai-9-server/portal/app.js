@@ -284,7 +284,6 @@ async function loadSubmissionLogs(submissionId, panel) {
     delete panel.dataset.loading;
   }
 }
-}
 
 async function downloadSubmissionLogs(submissionId) {
   if (!state.accessToken) return;
@@ -399,9 +398,9 @@ function renderLeaderboard(entries) {
           <span class="submission-id">#${entry.submission_id}</span>
         </td>
         <td>${escapeHtml(entry.team_name)}</td>
-        <td>${entry.total_score}</td>
+        <td>${formatInt64Score(entry.total_score)}</td>
         <td>${formatScore(entry.average_score)}</td>
-        <td>${entry.best_score ?? "-"}</td>
+        <td>${formatInt64Score(entry.best_score)}</td>
         <td>${entry.total_matches}</td>
       </tr>
     `;
@@ -472,9 +471,14 @@ function formatTime(value) {
 }
 
 function formatScore(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "-";
-  return number.toFixed(2).replace(/\.?0+$/, "");
+  if (value === null || value === undefined) return "-";
+  const text = String(value).trim();
+  return text || "-";
+}
+
+function formatInt64Score(value) {
+  if (value === null || value === undefined) return "-";
+  return escapeHtml(String(value));
 }
 
 function escapeHtml(value) {

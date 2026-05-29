@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import get_current_team
 from app.models import Match, MatchParticipant, Submission, SubmissionMatchLog, Team
 from app.schemas import SubmissionLogsOut, SubmissionMatchLogEntry, SubmissionOut
+from app.score_utils import serialize_score
 
 router = APIRouter()
 
@@ -84,7 +85,7 @@ async def _get_submission_matches(
         SubmissionMatchLogEntry(
             match_id=match.id,
             status=match.status,
-            score=participant.score if participant is not None else None,
+            score=serialize_score(participant.score if participant is not None else None),
             scheduled_at=match.scheduled_at,
             finished_at=match.finished_at,
             log=log_row.log or "",

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -54,8 +54,8 @@ class Match(Base):
     submission_a_id: Mapped[int] = mapped_column(Integer, ForeignKey("submissions.id"), nullable=False)
     submission_b_id: Mapped[int] = mapped_column(Integer, ForeignKey("submissions.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
-    score_a: Mapped[int | None] = mapped_column(Integer)
-    score_b: Mapped[int | None] = mapped_column(Integer)
+    score_a: Mapped[int | None] = mapped_column(BigInteger)
+    score_b: Mapped[int | None] = mapped_column(BigInteger)
     error_log: Mapped[str | None] = mapped_column(Text)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -69,7 +69,7 @@ class MatchParticipant(Base):
     submission_id: Mapped[int] = mapped_column(Integer, ForeignKey("submissions.id"), nullable=False)
     team_id: Mapped[int] = mapped_column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
     player_token: Mapped[str] = mapped_column(String(64), nullable=False)
-    score: Mapped[int | None] = mapped_column(Integer)
+    score: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class SubmissionMatchLog(Base):

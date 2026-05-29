@@ -74,12 +74,10 @@ class MatchOut(BaseModel):
     submission_a_id: int
     submission_b_id: int
     status: str
-    score_a: int | None
-    score_b: int | None
+    score_a: str | None
+    score_b: str | None
     scheduled_at: datetime
     finished_at: datetime | None
-
-    model_config = {"from_attributes": True}
 
 
 class TriggerMatchRequest(BaseModel):
@@ -91,16 +89,16 @@ class LeaderboardEntry(BaseModel):
     submission_id: int
     submission_name: str
     team_name: str
-    total_score: int
-    average_score: float
-    best_score: int | None
+    total_score: str
+    average_score: str
+    best_score: str | None
     total_matches: int
 
 
 class SubmissionMatchLogEntry(BaseModel):
     match_id: int
     status: str
-    score: int | None
+    score: str | None
     scheduled_at: datetime
     finished_at: datetime | None
     log: str

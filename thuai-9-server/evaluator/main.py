@@ -20,7 +20,7 @@ engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # Import models after engine is set up
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase
 
 # Keep at most this many match-log rows per submission so a long-lived arena
@@ -53,8 +53,8 @@ class Match(Base):
     submission_a_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
     submission_b_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
     status = Column(String(16), nullable=False)
-    score_a = Column(Integer)
-    score_b = Column(Integer)
+    score_a = Column(BigInteger)
+    score_b = Column(BigInteger)
     error_log = Column(Text)
     scheduled_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     finished_at = Column(DateTime(timezone=True))
@@ -67,7 +67,7 @@ class MatchParticipant(Base):
     submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
     team_id = Column(Integer, nullable=False)
     player_token = Column(String(64), nullable=False)
-    score = Column(Integer)
+    score = Column(BigInteger)
 
 
 class SubmissionMatchLog(Base):
@@ -467,17 +467,34 @@ async def ensure_schema():
         await conn.run_sync(Base.metadata.create_all)
 
         def add_submission_columns(sync_conn) -> None:
-            def ensure_column(column_name: str, ddl: str) -> None:
+            def _refresh_columns(table_name: str):
                 inspector = inspect(sync_conn)
-                columns = {column["name"] for column in inspector.get_columns("submissions")}
+                return {column["name"]: column for column in inspector.get_columns(table_name)}
+
+            def ensure_column(column_name: str, ddl: str) -> None:
+                columns = set(_refresh_columns("submissions"))
                 if column_name in columns:
                     return
                 try:
                     sync_conn.execute(text(ddl))
                 except Exception:
-                    inspector = inspect(sync_conn)
-                    columns = {column["name"] for column in inspector.get_columns("submissions")}
+                    columns = set(_refresh_columns("submissions"))
                     if column_name not in columns:
+                        raise
+
+            def ensure_bigint(table_name: str, column_name: str) -> None:
+                columns = _refresh_columns(table_name)
+                if column_name not in columns:
+                    return
+                if "BIGINT" in str(columns[column_name]["type"]).upper():
+                    return
+                try:
+                    sync_conn.execute(
+                        text(f"ALTER TABLE {table_name} ALTER COLUMN {column_name} TYPE BIGINT")
+                    )
+                except Exception:
+                    columns = _refresh_columns(table_name)
+                    if column_name not in columns or "BIGINT" not in str(columns[column_name]["type"]).upper():
                         raise
 
             ensure_column("name", "ALTER TABLE submissions ADD COLUMN name VARCHAR(64)")
@@ -485,6 +502,11 @@ async def ensure_schema():
                 "is_dispatched",
                 "ALTER TABLE submissions ADD COLUMN is_dispatched BOOLEAN DEFAULT FALSE",
             )
+
+            if sync_conn.dialect.name == "postgresql":
+                ensure_bigint("matches", "score_a")
+                ensure_bigint("matches", "score_b")
+                ensure_bigint("match_participants", "score")
 
         await conn.run_sync(add_submission_columns)
 
