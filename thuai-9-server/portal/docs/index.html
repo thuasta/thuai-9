@@ -28,8 +28,8 @@
         </div>
         <ol class="doc-list">
           <li>在比赛平台注册队伍或登录已有队伍账号。</li>
-          <li>准备代码压缩包。Python 提交需要包含 <code>main.py</code>，C++ 提交需要包含可构建的工程文件。</li>
-          <li>在“提交代码”区域选择语言并上传 <code>.zip</code> 文件，单个文件最大 10 MB。</li>
+          <li>准备代码压缩包，压缩包根目录必须包含 <code>Dockerfile</code>。</li>
+          <li>在“提交代码”区域上传 <code>.zip</code> 文件，单个文件最大 10 MB。</li>
           <li>等待评测 worker 编译并安排对局，结果会进入排行榜。</li>
           <li>通过公开观战台查看实时游戏状态；观战台默认连接当前网页的 <code>/ws/game</code>。</li>
         </ol>
@@ -44,12 +44,12 @@
         </div>
         <div class="doc-grid">
           <div>
-            <h3>Python</h3>
-            <p>压缩包内必须包含 <code>main.py</code>，允许 <code>.py</code>、<code>.txt</code>、<code>.json</code>、<code>.yaml</code>、<code>.yml</code>、<code>.toml</code>、<code>.md</code> 文件。</p>
+            <h3>Dockerfile</h3>
+            <p>压缩包根目录必须包含 <code>Dockerfile</code>。评测机会会以压缩包根目录作为构建上下文来构建镜像并在对局中运行。</p>
           </div>
           <div>
-            <h3>C++</h3>
-            <p>上传 <code>.zip</code> 压缩包。评测环境会在隔离容器中编译并运行提交产物。</p>
+            <h3>代码内容</h3>
+            <p>不再区分语言类型，镜像里可使用任意语言实现，只要容器启动后能按环境变量 <code>TOKEN</code> 和 <code>SERVER</code> 连接游戏服。</p>
           </div>
           <div>
             <h3>安全限制</h3>

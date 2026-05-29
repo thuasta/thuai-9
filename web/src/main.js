@@ -15,6 +15,7 @@ import {
 } from "./actions.js";
 import { buildSampleMessages } from "./sample-data.js";
 import { buildReplaySession } from "./replay.js";
+import { describeObserverConnection, normalizeObserverMatch } from "./observer-status.js";
 import {
   applyMessage,
   applyPlayerMap,
@@ -270,12 +271,45 @@ function isPublicSpectatorPage() {
 const PLAYER_MAP_POLL_MS = 15000;
 let playerMapTimer = null;
 
+function isManagedObserverSession() {
+  return isPublicSpectatorPage() && state.connection.role === "observer" && !state.replay.enabled;
+}
+
+function syncManagedObserverConnection(options = {}) {
+  if (!isManagedObserverSession()) return;
+  const description = describeObserverConnection(
+    {
+      matchId: state.connection.currentMatchId,
+      matchStatus: state.connection.currentMatchStatus,
+    },
+    {
+      socketConnected: Boolean(options.socketConnected),
+      manuallyDisconnected: Boolean(options.manuallyDisconnected),
+      reconnectAttempt: state.connection.reconnectAttempt,
+    },
+  );
+  setConnectionPatch(state, description);
+}
+
+function applyManagedObserverMatch(payload) {
+  if (!isManagedObserverSession()) return;
+  const match = normalizeObserverMatch(payload);
+  setConnectionPatch(state, {
+    currentMatchId: match.matchId,
+    currentMatchStatus: match.matchStatus,
+  });
+  syncManagedObserverConnection({
+    socketConnected: state.connection.status === "connected",
+  });
+}
+
 async function fetchPlayerMap() {
   try {
     const res = await fetch("/api/matches/current/player-map", { credentials: "omit" });
     if (!res.ok) return;
     const data = await res.json();
     applyPlayerMap(state, Array.isArray(data?.players) ? data.players : []);
+    applyManagedObserverMatch(data);
     renderApp(state);
   } catch {
     // Silent — the spectator UI falls back to "选手 N" labels if the API is down.
@@ -316,14 +350,20 @@ function connect() {
   const server = buildServerUrl(currentServerMode(), localhostPort);
   const token = document.getElementById("tokenInput")?.value.trim() || state.connection.token;
   const adminSecret = document.getElementById("adminSecretInput")?.value.trim() || state.connection.adminSecret;
-  setConnectionPatch(state, {
+  const connectionPatch = {
     server,
     localhostPort,
     token,
     adminSecret,
     status: "connecting",
     lastError: "",
-  });
+    statusLabel: "",
+    statusDetail: "",
+  };
+  setConnectionPatch(state, connectionPatch);
+  if (isManagedObserverSession()) {
+    syncManagedObserverConnection({ socketConnected: false });
+  }
   updateRoute();
   renderApp(state);
 
@@ -340,6 +380,7 @@ function connect() {
       reconnectAttempt: 0,
       lastError: "",
     });
+    syncManagedObserverConnection({ socketConnected: true });
     sendAction(
       helloMessage(state.connection.role, state.connection.token, state.connection.adminSecret),
       { silent: true },
@@ -368,12 +409,20 @@ function connect() {
   });
 
   ws.addEventListener("close", () => {
+    ws = null;
     if (state.replay.enabled) {
       renderApp(state);
       return;
     }
-    const nextStatus = manuallyClosed ? "disconnected" : "error";
-    setConnectionPatch(state, { status: nextStatus });
+    if (isManagedObserverSession()) {
+      syncManagedObserverConnection({
+        socketConnected: false,
+        manuallyDisconnected: manuallyClosed,
+      });
+    } else {
+      const nextStatus = manuallyClosed ? "disconnected" : "error";
+      setConnectionPatch(state, { status: nextStatus });
+    }
     renderApp(state);
     if (!manuallyClosed) scheduleReconnect();
   });
@@ -387,6 +436,12 @@ function disconnect(byUser) {
     ws.close();
   }
   setConnectionPatch(state, { status: "disconnected" });
+  if (isManagedObserverSession()) {
+    syncManagedObserverConnection({
+      socketConnected: false,
+      manuallyDisconnected: true,
+    });
+  }
   renderApp(state);
 }
 
@@ -394,10 +449,22 @@ function scheduleReconnect() {
   const attempt = state.connection.reconnectAttempt + 1;
   const delay = Math.min(10000, 500 * 2 ** Math.min(attempt, 5));
   setConnectionPatch(state, { reconnectAttempt: attempt });
+  if (isManagedObserverSession()) {
+    syncManagedObserverConnection({ socketConnected: false });
+    renderApp(state);
+  }
   reconnectTimer = window.setTimeout(connect, delay);
 }
 
 function handleSocketError(error) {
+  if (isManagedObserverSession()) {
+    setConnectionPatch(state, {
+      lastError: error.message,
+    });
+    syncManagedObserverConnection({ socketConnected: false });
+    renderApp(state);
+    return;
+  }
   setConnectionPatch(state, {
     status: "error",
     lastError: error.message,
@@ -583,7 +650,12 @@ async function handleReplayLoad() {
     hasStats: Boolean(statFile),
     statEventCount: 0,
   });
-  setConnectionPatch(state, { status: "replay", lastError: "" });
+  setConnectionPatch(state, {
+    status: "replay",
+    lastError: "",
+    statusLabel: "",
+    statusDetail: "",
+  });
   renderApp(state);
 
   try {
@@ -601,7 +673,12 @@ async function handleReplayLoad() {
       hasStats: replaySession.hasStats,
       statEventCount: replaySession.statEventCount,
     });
-    setConnectionPatch(state, { status: "replay", lastError: "" });
+    setConnectionPatch(state, {
+      status: "replay",
+      lastError: "",
+      statusLabel: "",
+      statusDetail: "",
+    });
     setActiveView(state, "logs");
     resetMarketChartViewport();
     seekReplayFrame(0);
@@ -614,7 +691,12 @@ async function handleReplayLoad() {
       playing: false,
       error: error.message || "回放加载失败",
     });
-    setConnectionPatch(state, { status: "error", lastError: error.message || "回放加载失败" });
+    setConnectionPatch(state, {
+      status: "error",
+      lastError: error.message || "回放加载失败",
+      statusLabel: "",
+      statusDetail: "",
+    });
     renderApp(state);
   }
 }

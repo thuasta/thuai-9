@@ -57,10 +57,12 @@ class TokenResponse(BaseModel):
 
 class SubmissionOut(BaseModel):
     id: int
+    name: str
     language: str
     status: str
+    is_dispatched: bool
     error_log: str | None
-    uploaded_at: datetime
+    uploaded_at: datetime | None
     compiled_at: datetime | None
 
     model_config = {"from_attributes": True}
@@ -86,6 +88,8 @@ class TriggerMatchRequest(BaseModel):
 
 
 class LeaderboardEntry(BaseModel):
+    submission_id: int
+    submission_name: str
     team_name: str
     total_score: int
     average_score: float

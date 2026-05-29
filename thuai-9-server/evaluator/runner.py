@@ -14,40 +14,60 @@ logger = logging.getLogger(__name__)
 
 GAME_TIMEOUT_SECONDS = 360
 POLL_INTERVAL = 1
+MANAGED_AGENT_LABEL = "thuai9.managed"
+MANAGED_AGENT_VALUE = "evaluator-agent"
 
 
 @dataclass(frozen=True)
 class MatchAgent:
     submission_id: int
     team_id: int
-    language: str
+    image_ref: str
     token: str
 
 
-def _spawn_agent(client, agent: MatchAgent):
-    artifact_dir = os.path.join(settings.artifact_dir, str(agent.submission_id))
-    if not os.path.isdir(artifact_dir):
-        raise FileNotFoundError(f"artifact directory not found: {artifact_dir}")
-
-    image = (
-        "ghcr.io/thuasta/thuai-9-sdk-cpp:latest"
-        if agent.language == "cpp"
-        else "ghcr.io/thuasta/thuai-9-sdk-python:latest"
-    )
+def _spawn_agent(client, match_id: int, agent: MatchAgent):
+    if not agent.image_ref:
+        raise ValueError(f"submission {agent.submission_id} missing image reference")
 
     return client.containers.run(
-        image=image,
+        image=agent.image_ref,
         environment={
             "TOKEN": agent.token,
             "SERVER": settings.live_server_url,
         },
-        volumes={artifact_dir: {"bind": "/app", "mode": "ro"}},
         network=settings.live_server_network,
         mem_limit="256m",
         nano_cpus=500_000_000,
+        labels={
+            MANAGED_AGENT_LABEL: MANAGED_AGENT_VALUE,
+            "thuai9.match_id": str(match_id),
+            "thuai9.submission_id": str(agent.submission_id),
+        },
         detach=True,
         remove=False,
     )
+
+
+def _prepare_live_server_config_dir() -> str:
+    config_dir = os.path.join(settings.match_data_dir, "live-server-config")
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, "config.json")
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "game": {
+                    # Allow arena matches to start even when only one
+                    # dispatched ready submission is available.
+                    "minimumPlayerCount": 1,
+                }
+            },
+            f,
+            ensure_ascii=False,
+        )
+
+    return config_dir
 
 
 def _start_live_server(client, tokens: list[str]):
@@ -65,14 +85,18 @@ def _start_live_server(client, tokens: list[str]):
         settings.live_server_container,
         len(tokens),
     )
+    config_dir = _prepare_live_server_config_dir()
     server = client.containers.run(
         image=settings.live_server_image,
         name=settings.live_server_container,
         entrypoint=["./server"],
         environment={"TOKENS": ",".join(tokens)},
+        labels={
+            "thuai9.managed": "live-server",
+        },
         volumes={
             settings.live_server_data_dir: {"bind": "/app/data", "mode": "rw"},
-            settings.game_config_dir: {"bind": "/app/config", "mode": "ro"},
+            config_dir: {"bind": "/app/config", "mode": "ro"},
         },
         network=settings.live_server_network,
         detach=True,
@@ -87,6 +111,33 @@ def _start_live_server(client, tokens: list[str]):
         time.sleep(0.5)
 
     raise RuntimeError(f"live server {settings.live_server_container} did not become running")
+
+
+def cleanup_runtime_containers() -> None:
+    client = get_docker()
+
+    try:
+        old_server = client.containers.get(settings.live_server_container)
+        old_server.remove(force=True)
+        logger.info("Removed stale live game server container %s", settings.live_server_container)
+    except Exception:
+        pass
+
+    try:
+        stale_agents = client.containers.list(
+            all=True,
+            filters={"label": f"{MANAGED_AGENT_LABEL}={MANAGED_AGENT_VALUE}"},
+        )
+    except Exception:
+        logger.exception("Failed to list stale agent containers")
+        return
+
+    for container in stale_agents:
+        try:
+            container.remove(force=True)
+            logger.info("Removed stale agent container %s", container.name)
+        except Exception:
+            logger.exception("Failed to remove stale agent container %s", container.name)
 
 
 def _read_result(result_path: str) -> dict[str, int] | None:
@@ -154,8 +205,8 @@ def run_match(
     container. ``agent_logs`` is populated regardless of outcome so the
     portal can show teams their own output even on success.
     """
-    if len(agents) < 2:
-        return None, "至少需要两个 ready 提交才能开赛", {}
+    if not agents:
+        return None, "没有可参赛的 ready 提交", {}
 
     client = get_docker()
     data_dir = settings.live_server_data_dir
@@ -168,6 +219,7 @@ def run_match(
         pass
 
     containers = []
+    server = None
     # Indexed by submission_id so callers can persist per-team logs even when
     # an exception forces an early return.
     container_by_submission: dict[int, object] = {}
@@ -187,7 +239,7 @@ def run_match(
         time.sleep(2)
 
         for agent in agents:
-            container = _spawn_agent(client, agent)
+            container = _spawn_agent(client, match_id, agent)
             containers.append(container)
             container_by_submission[agent.submission_id] = container
             logger.info(
@@ -241,6 +293,16 @@ def run_match(
         return None, f"{exc}\n\n{log_suffix}".strip(), agent_logs
 
     finally:
+        if server is not None:
+            try:
+                server.stop(timeout=5)
+            except Exception:
+                pass
+            try:
+                server.remove(force=True)
+            except Exception:
+                pass
+
         for container in containers:
             try:
                 container.stop(timeout=5)

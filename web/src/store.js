@@ -50,6 +50,10 @@ export function createInitialState(route = {}) {
       reconnectAttempt: 0,
       lastError: "",
       lastSent: "",
+      statusLabel: "",
+      statusDetail: "",
+      currentMatchId: null,
+      currentMatchStatus: "",
     },
     game: {
       stage: "",

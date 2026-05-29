@@ -4,6 +4,8 @@ const state = {
   gameToken: localStorage.getItem("thuai9GameToken") || "",
 };
 
+const logPollers = new Map();
+
 const els = {
   authForm: document.getElementById("authForm"),
   authSubmit: document.getElementById("authSubmit"),
@@ -99,6 +101,17 @@ async function submitCode(event) {
     return;
   }
 
+  const rawName = String(form.get("name") || "").trim();
+  if (rawName.length > 64) {
+    setStatus(els.uploadStatus, "代码名称不能超过 64 个字符。", "error");
+    return;
+  }
+  if (rawName) {
+    form.set("name", rawName);
+  } else {
+    form.delete("name");
+  }
+
   setStatus(els.uploadStatus, "上传中...");
   try {
     await requestJson("/api/submissions/upload", {
@@ -107,8 +120,8 @@ async function submitCode(event) {
       body: form,
     });
     els.uploadForm.reset();
-    setStatus(els.uploadStatus, "上传成功，等待评测。", "ok");
-    loadSubmissions();
+    setStatus(els.uploadStatus, "上传成功，编译完成后可派遣。", "ok");
+    await loadSubmissions();
   } catch (error) {
     setStatus(els.uploadStatus, error.message, "error");
   }
@@ -116,6 +129,7 @@ async function submitCode(event) {
 
 async function loadSubmissions() {
   if (!state.accessToken) {
+    stopAllLogPolling();
     els.submissionsList.className = "empty";
     els.submissionsList.textContent = "登录后显示提交记录。";
     return;
@@ -149,6 +163,7 @@ function renderSession() {
 const MAX_LOG_DISPLAY = 8 * 1024;
 
 function renderSubmissions(submissions) {
+  stopAllLogPolling();
   if (!Array.isArray(submissions) || submissions.length === 0) {
     els.submissionsList.className = "empty";
     els.submissionsList.textContent = "暂无提交记录。";
@@ -158,25 +173,72 @@ function renderSubmissions(submissions) {
   els.submissionsList.className = "";
   els.submissionsList.innerHTML = `
     <ul class="submission-list">
-      ${submissions.map((item) => `
-        <li data-submission-id="${item.id}">
-          <div class="submission-row">
-            <div>
-              <strong>#${item.id} ${escapeHtml(item.language)}</strong>
-              <div class="submission-meta">${formatTime(item.uploaded_at)}</div>
+      ${submissions.map((item) => {
+        const canDispatch = item.status === "ready" && !item.is_dispatched;
+        const dispatchLabel = item.is_dispatched
+          ? "当前出战"
+          : item.status === "ready"
+            ? "派遣此代码"
+            : "仅 ready 可派遣";
+        return `
+          <li data-submission-id="${item.id}">
+            <div class="submission-row">
+              <div class="submission-main">
+                <div class="submission-title">
+                  <strong>${escapeHtml(item.name || `代码 #${item.id}`)}</strong>
+                  <span class="submission-id">#${item.id}</span>
+                  ${item.is_dispatched ? '<span class="submission-badge is-dispatched">当前派遣</span>' : ""}
+                </div>
+                <div class="submission-meta">
+                  <span>${formatTime(item.uploaded_at)}</span>
+                  <span>${escapeHtml(item.language)}</span>
+                  <span>${escapeHtml(item.status)}</span>
+                </div>
+              </div>
+              <div class="submission-actions">
+                <button
+                  type="button"
+                  class="link-button"
+                  data-action="dispatch"
+                  data-submission-id="${item.id}"
+                  ${canDispatch ? "" : "disabled"}
+                >
+                  ${dispatchLabel}
+                </button>
+                <button type="button" class="link-button" data-action="toggle-logs" data-submission-id="${item.id}">查看日志</button>
+                <button type="button" class="link-button" data-action="download-logs" data-submission-id="${item.id}">下载日志</button>
+              </div>
             </div>
-            <span>${escapeHtml(item.status)}</span>
-            <button type="button" class="link-button" data-action="toggle-logs" data-submission-id="${item.id}">查看日志</button>
-          </div>
-          <div class="submission-logs" data-logs-for="${item.id}" hidden></div>
-        </li>
-      `).join("")}
+            <div class="submission-logs" data-logs-for="${item.id}" hidden></div>
+          </li>
+        `;
+      }).join("")}
     </ul>
   `;
 
+  els.submissionsList.querySelectorAll("[data-action='dispatch']").forEach((button) => {
+    button.addEventListener("click", () => dispatchSubmission(button.dataset.submissionId));
+  });
   els.submissionsList.querySelectorAll("[data-action='toggle-logs']").forEach((button) => {
     button.addEventListener("click", () => toggleLogs(button.dataset.submissionId));
   });
+  els.submissionsList.querySelectorAll("[data-action='download-logs']").forEach((button) => {
+    button.addEventListener("click", () => downloadSubmissionLogs(button.dataset.submissionId));
+  });
+}
+
+async function dispatchSubmission(submissionId) {
+  if (!state.accessToken) return;
+  try {
+    await requestJson(`/api/submissions/${submissionId}/dispatch`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${state.accessToken}` },
+    });
+    setStatus(els.uploadStatus, "已切换当前出战代码。", "ok");
+    await loadSubmissions();
+  } catch (error) {
+    setStatus(els.uploadStatus, error.message, "error");
+  }
 }
 
 async function toggleLogs(submissionId) {
@@ -185,18 +247,35 @@ async function toggleLogs(submissionId) {
   if (!panel) return;
   if (!panel.hidden) {
     panel.hidden = true;
+    stopLogPolling(submissionId);
     return;
   }
   if (panel.dataset.loading === "1") return;
   panel.hidden = false;
+  await loadSubmissionLogs(submissionId, panel);
+}
+
+async function loadSubmissionLogs(submissionId, panel) {
+  stopLogPolling(submissionId);
   panel.dataset.loading = "1";
   panel.innerHTML = `<div class="logs-status">加载中…</div>`;
   try {
     const data = await requestJson(`/api/submissions/${submissionId}/logs`, {
       headers: { Authorization: `Bearer ${state.accessToken}` },
     });
-    if (panel.hidden) return; // collapsed mid-flight — don't write into a hidden panel
+    if (panel.hidden) return;
     panel.innerHTML = renderLogsBody(data);
+    if (shouldPollLogs(data.status)) {
+      const timerId = setTimeout(() => {
+        const nextPanel = els.submissionsList.querySelector(`[data-logs-for="${submissionId}"]`);
+        if (!nextPanel || nextPanel.hidden) {
+          stopLogPolling(submissionId);
+          return;
+        }
+        loadSubmissionLogs(submissionId, nextPanel);
+      }, 1500);
+      logPollers.set(String(submissionId), timerId);
+    }
   } catch (error) {
     if (!panel.hidden) {
       panel.innerHTML = `<div class="logs-status is-error">${escapeHtml(error.message)}</div>`;
@@ -205,14 +284,66 @@ async function toggleLogs(submissionId) {
     delete panel.dataset.loading;
   }
 }
+}
+
+async function downloadSubmissionLogs(submissionId) {
+  if (!state.accessToken) return;
+  try {
+    const response = await fetch(`/api/submissions/${submissionId}/logs/download`, {
+      headers: { Authorization: `Bearer ${state.accessToken}` },
+    });
+    if (!response.ok) {
+      let json = null;
+      try {
+        json = await response.json();
+      } catch {
+        json = null;
+      }
+      throw new Error(formatApiError(json, response.status));
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `submission-${submissionId}-logs.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    setStatus(els.uploadStatus, error.message, "error");
+  }
+}
+
+function shouldPollLogs(status) {
+  return status === "pending" || status === "compiling";
+}
+
+function stopLogPolling(submissionId) {
+  const key = String(submissionId);
+  const timerId = logPollers.get(key);
+  if (timerId) {
+    clearTimeout(timerId);
+    logPollers.delete(key);
+  }
+}
+
+function stopAllLogPolling() {
+  for (const timerId of logPollers.values()) {
+    clearTimeout(timerId);
+  }
+  logPollers.clear();
+}
 
 function renderLogsBody(data) {
   const sections = [];
-  if (data.compile_log) {
+  const compileLog = data.compile_log || fallbackCompileLog(data.status);
+  if (compileLog) {
     sections.push(`
       <section class="log-section">
         <h4>编译日志</h4>
-        <pre>${escapeHtml(truncate(data.compile_log))}</pre>
+        <pre>${escapeHtml(truncate(compileLog))}</pre>
       </section>
     `);
   }
@@ -240,6 +371,12 @@ function renderLogsBody(data) {
   return sections.join("");
 }
 
+function fallbackCompileLog(status) {
+  if (status === "pending") return "等待评测器开始编译...";
+  if (status === "compiling") return "编译中...";
+  return "";
+}
+
 function truncate(text) {
   const str = String(text || "");
   if (str.length <= MAX_LOG_DISPLAY) return str;
@@ -249,7 +386,7 @@ function truncate(text) {
 
 function renderLeaderboard(entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
-    els.leaderboardBody.innerHTML = `<tr><td colspan="6">暂无对战数据。</td></tr>`;
+    els.leaderboardBody.innerHTML = `<tr><td colspan="7">暂无对战数据。</td></tr>`;
     return;
   }
 
@@ -257,7 +394,11 @@ function renderLeaderboard(entries) {
     return `
       <tr>
         <td>${index + 1}</td>
-        <td><strong>${escapeHtml(entry.team_name)}</strong></td>
+        <td>
+          <strong>${escapeHtml(entry.submission_name || `代码 #${entry.submission_id}`)}</strong>
+          <span class="submission-id">#${entry.submission_id}</span>
+        </td>
+        <td>${escapeHtml(entry.team_name)}</td>
         <td>${entry.total_score}</td>
         <td>${formatScore(entry.average_score)}</td>
         <td>${entry.best_score ?? "-"}</td>
@@ -268,6 +409,7 @@ function renderLeaderboard(entries) {
 }
 
 function logout() {
+  stopAllLogPolling();
   state.accessToken = "";
   state.gameToken = "";
   localStorage.removeItem("thuai9AccessToken");

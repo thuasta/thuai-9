@@ -328,12 +328,54 @@ th {
 
 .submission-list .submission-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.submission-list .submission-row > :first-child {
+.submission-main {
   flex: 1;
+  min-width: 0;
+}
+
+.submission-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.submission-id {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.submission-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.submission-badge.is-dispatched {
+  background: rgba(6, 118, 71, 0.12);
+  color: var(--success);
+}
+
+.submission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.submission-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .link-button {
@@ -348,6 +390,13 @@ th {
 
 .link-button:hover {
   color: #1d4ed8;
+}
+
+.link-button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 1;
+  text-decoration: none;
 }
 
 .submission-logs {
@@ -430,5 +479,11 @@ th {
   .top-actions > *,
   .tabs > * {
     flex: 1;
+  }
+
+  .submission-list .submission-row,
+  .submission-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

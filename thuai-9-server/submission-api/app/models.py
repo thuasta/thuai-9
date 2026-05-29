@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -24,11 +24,23 @@ class Submission(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     team_id: Mapped[int] = mapped_column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
-    language: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False, default="未命名代码")
+    language: Mapped[str] = mapped_column(String(8), nullable=False, default="docker", server_default="docker")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    is_dispatched: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     error_log: Mapped[str | None] = mapped_column(Text)
     artifact_path: Mapped[str | None] = mapped_column(Text)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+        server_default=func.now(),
+    )
     compiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     team: Mapped["Team"] = relationship(back_populates="submissions")
